@@ -262,94 +262,97 @@ class _UsersPageState extends State<UsersPage> {
                     borderRadius: BorderRadius.circular(15),
                   ),
                   child: SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: DataTable(
-                      headingRowHeight: 60,
-                      dataRowHeight: 70,
-                      columnSpacing: 40,
-                      headingTextStyle: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        color: Colors.black,
-                        fontSize: 16,
-                      ),
-                      columns: const [
-                        DataColumn(label: Text("Username")),
-                        DataColumn(label: Text("Email")),
-                        DataColumn(label: Text("ProfilePic")),
-                        DataColumn(label: Text("Status")),
-                        DataColumn(label: Text("Created")),
-                        DataColumn(label: Text("Actions")),
-                      ],
-                      rows: filteredUsers.map((user) {
-                        return DataRow(
-                          cells: [
-                            DataCell(Text(user.username)),
-                            DataCell(Text(user.email)),
-                            DataCell(
-                              CircleAvatar(
-                                radius: 20,
-                                backgroundImage: user.profilePic != null
-                                    ? NetworkImage(user.profilePic!)
-                                    : null,
-                                child: user.profilePic == null
-                                    ? Text(user.username[0].toUpperCase())
-                                    : null,
-                              ),
-                            ),
-                            DataCell(
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 12,
-                                  vertical: 6,
+                    scrollDirection: Axis.vertical,
+                    child: SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: DataTable(
+                        headingRowHeight: 60,
+                        dataRowHeight: 70,
+                        columnSpacing: 40,
+                        headingTextStyle: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: Colors.black,
+                          fontSize: 16,
+                        ),
+                        columns: const [
+                          DataColumn(label: Text("Username")),
+                          DataColumn(label: Text("Email")),
+                          DataColumn(label: Text("ProfilePic")),
+                          DataColumn(label: Text("Status")),
+                          DataColumn(label: Text("Created")),
+                          DataColumn(label: Text("Actions")),
+                        ],
+                        rows: filteredUsers.map((user) {
+                          return DataRow(
+                            cells: [
+                              DataCell(Text(user.username)),
+                              DataCell(Text(user.email)),
+                              DataCell(
+                                CircleAvatar(
+                                  radius: 20,
+                                  backgroundImage: user.profilePic != null
+                                      ? NetworkImage(user.profilePic!)
+                                      : null,
+                                  child: user.profilePic == null
+                                      ? Text(user.username[0].toUpperCase())
+                                      : null,
                                 ),
-                                decoration: BoxDecoration(
-                                  color: statusColor(
+                              ),
+                              DataCell(
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                    vertical: 6,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: statusColor(
+                                      user.status,
+                                    ).withValues(alpha: .15),
+                                    borderRadius: BorderRadius.circular(30),
+                                  ),
+                                  child: Text(
                                     user.status,
-                                  ).withValues(alpha: .15),
-                                  borderRadius: BorderRadius.circular(30),
-                                ),
-                                child: Text(
-                                  user.status,
-                                  style: TextStyle(
-                                    color: statusColor(user.status),
-                                    fontWeight: FontWeight.bold,
+                                    style: TextStyle(
+                                      color: statusColor(user.status),
+                                      fontWeight: FontWeight.bold,
+                                    ),
                                   ),
                                 ),
                               ),
-                            ),
-                            DataCell(
-                              Text(
-                                "${user.createdAt.day}/${user.createdAt.month}/${user.createdAt.year}",
+                              DataCell(
+                                Text(
+                                  "${user.createdAt.day}/${user.createdAt.month}/${user.createdAt.year}",
+                                ),
                               ),
-                            ),
-                            DataCell(
-                              Row(
-                                children: [
-                                  ElevatedButton.icon(
-                                    onPressed: () => editUser(user),
-                                    icon: const Icon(Icons.edit, size: 18),
-                                    label: const Text("Edit"),
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: Colors.blue,
-                                      foregroundColor: Colors.white,
+                              DataCell(
+                                Row(
+                                  children: [
+                                    ElevatedButton.icon(
+                                      onPressed: () => editUser(user),
+                                      icon: const Icon(Icons.edit, size: 18),
+                                      label: const Text("Edit"),
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: Colors.blue,
+                                        foregroundColor: Colors.white,
+                                      ),
                                     ),
-                                  ),
-                                  const SizedBox(width: 10),
-                                  ElevatedButton.icon(
-                                    onPressed: () => deleteUser(user),
-                                    icon: const Icon(Icons.delete, size: 18),
-                                    label: const Text("Delete"),
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: Colors.red,
-                                      foregroundColor: Colors.white,
+                                    const SizedBox(width: 10),
+                                    ElevatedButton.icon(
+                                      onPressed: () => deleteUser(user),
+                                      icon: const Icon(Icons.delete, size: 18),
+                                      label: const Text("Delete"),
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: Colors.red,
+                                        foregroundColor: Colors.white,
+                                      ),
                                     ),
-                                  ),
-                                ],
+                                  ],
+                                ),
                               ),
-                            ),
-                          ],
-                        );
-                      }).toList(),
+                            ],
+                          );
+                        }).toList(),
+                      ),
                     ),
                   ),
                 ),

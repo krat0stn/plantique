@@ -11,20 +11,16 @@ const {
 } = require("../controllers/notificationController");
 
 // GET /api/postes
-exports.getAllPostes = async (req, res) => {
+exports.getAllPostesAdmin = async (req, res) => {
   try {
-    const items = await Poste.find(
-      {},
-      "userId content picture status likesCount commentsCount  savedCount createdAt"
-    )
+    const posts = await Poste.find()
       .sort({ createdAt: -1 })
-      .populate("userId", "username picture");
-    return res.status(200).json({
-      successmessage: "Les Postes ont été récupérés avec succès",
-      data: items,
-    });
-  } catch (error) {
-    return res.status(500).json({ errormessage: "Erreur " + error.message });
+      .populate('userId', 'username email picture');
+    
+    res.json({ ok: true, data: posts });
+  } catch (err) {
+    console.error("Error fetching admin posts:", err);
+    res.status(500).json({ ok: false, error: err.message });
   }
 };
 

@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:pfe_dash/services/api_service.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
 
 class PlantModel {
   final String id;
@@ -48,6 +51,7 @@ class _PlantsPageState extends State<PlantsPage> {
   List<PlantModel> filteredPlants = [];
   bool loading = true;
   String? error;
+  PlatformFile? selectedImage;
 
   final TextEditingController searchController = TextEditingController();
   String selectedType = "All";
@@ -158,12 +162,22 @@ class _PlantsPageState extends State<PlantsPage> {
     }
   }
 
+  Future<void> pickImage() async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.image,
+      withData: true,
+    );
+
+    if (result != null) {
+      setState(() => selectedImage = result.files.first);
+    }
+  }
+
   // ── ADD PLANT DIALOG ────────────────────────────────────────────
   void showAddPlantDialog() {
     final plantController = TextEditingController();
     final scientificController = TextEditingController();
     final tunisianController = TextEditingController();
-    final imageController = TextEditingController();
     final descController = TextEditingController();
     String type = availableTypes.length > 1 ? availableTypes[1] : 'Flower';
 
@@ -180,45 +194,71 @@ class _PlantsPageState extends State<PlantsPage> {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
+                      // Image picker
+                      ElevatedButton.icon(
+                        onPressed: () async {
+                          await pickImage();
+                          setDialogState(
+                            () {},
+                          ); // Refresh dialog to show filename
+                        },
+                        icon: const Icon(Icons.image),
+                        label: Text(
+                          selectedImage == null
+                              ? "Pick Image"
+                              : "Image: ${selectedImage!.name}",
+                        ),
+                      ),
+                      const SizedBox(height: 15),
+
+                      // Plant Name
                       TextField(
                         controller: plantController,
                         decoration: const InputDecoration(
-                          labelText: "Plant Name",
+                          labelText: "Plant Name *",
+                          border: OutlineInputBorder(),
                         ),
                       ),
                       const SizedBox(height: 12),
+
+                      // Scientific Name
                       TextField(
                         controller: scientificController,
                         decoration: const InputDecoration(
-                          labelText: "Scientific Name",
+                          labelText: "Scientific Name *",
+                          border: OutlineInputBorder(),
                         ),
                       ),
                       const SizedBox(height: 12),
+
+                      // Tunisian Name
                       TextField(
                         controller: tunisianController,
                         decoration: const InputDecoration(
                           labelText: "Tunisian Name",
+                          border: OutlineInputBorder(),
                         ),
                       ),
                       const SizedBox(height: 12),
-                      TextField(
-                        controller: imageController,
-                        decoration: const InputDecoration(
-                          labelText: "Image URL",
-                        ),
-                      ),
-                      const SizedBox(height: 12),
+
+                      // Description
                       TextField(
                         controller: descController,
                         maxLines: 3,
                         decoration: const InputDecoration(
                           labelText: "Description",
+                          border: OutlineInputBorder(),
                         ),
                       ),
                       const SizedBox(height: 12),
+
+                      // Type dropdown
                       DropdownButtonFormField<String>(
                         value: type,
-                        decoration: const InputDecoration(labelText: "Type"),
+                        decoration: const InputDecoration(
+                          labelText: "Type",
+                          border: OutlineInputBorder(),
+                        ),
                         items: availableTypes
                             .where((e) => e != "All")
                             .map(
@@ -240,22 +280,41 @@ class _PlantsPageState extends State<PlantsPage> {
                 ElevatedButton(
                   onPressed: () async {
                     if (plantController.text.isEmpty ||
-                        scientificController.text.isEmpty)
+                        scientificController.text.isEmpty) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text(
+                            "Plant name and Scientific name are required",
+                          ),
+                        ),
+                      );
                       return;
+                    }
 
                     Navigator.pop(context);
+
+                    // Convert image to base64 if selected
+                    String? imageBase64;
+                    if (selectedImage != null) {
+                      imageBase64 = base64Encode(selectedImage!.bytes!);
+                    }
+
+                    // Send as normal JSON (not multipart)
                     await addPlant({
                       'plantName': plantController.text,
                       'scientificName': scientificController.text,
                       'tunisianName': tunisianController.text,
-                      'imageUrl': imageController.text,
                       'description': descController.text,
                       'plantType': type,
                       'slug': plantController.text.toLowerCase().replaceAll(
                         ' ',
                         '-',
                       ),
+                      'imageBase64': imageBase64, // ← base64 string or null
                     });
+
+                    setState(() => selectedImage = null);
+                    await loadPlants();
                   },
                   child: const Text("Add"),
                 ),
@@ -465,99 +524,103 @@ class _PlantsPageState extends State<PlantsPage> {
                     borderRadius: BorderRadius.circular(15),
                   ),
                   child: SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: DataTable(
-                      headingRowHeight: 60,
-                      dataRowHeight: 80,
-                      columnSpacing: 35,
-                      horizontalMargin: 20,
-                      headingTextStyle: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        color: Colors.black,
-                        fontSize: 16,
-                      ),
-                      columns: const [
-                        DataColumn(label: Text("Image")),
-                        DataColumn(label: Text("Plant")),
-                        DataColumn(label: Text("Scientific")),
-                        DataColumn(label: Text("Tunisian")),
-                        DataColumn(label: Text("Type")),
-                        DataColumn(label: Text("Actions")),
-                      ],
-                      rows: filteredPlants.map((plant) {
-                        return DataRow(
-                          cells: [
-                            DataCell(
-                              CircleAvatar(
-                                radius: 25,
-                                backgroundImage: plant.preview.isNotEmpty
-                                    ? NetworkImage(plant.preview)
-                                    : null,
-                                child: plant.preview.isEmpty
-                                    ? const Icon(Icons.local_florist)
-                                    : null,
-                              ),
-                            ),
-                            DataCell(
-                              Text(
-                                plant.plant,
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.w600,
+                    scrollDirection: Axis.vertical,
+                    child: SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: DataTable(
+                        headingRowHeight: 60,
+                        dataRowHeight: 80,
+                        columnSpacing: 35,
+                        horizontalMargin: 20,
+                        headingTextStyle: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: Colors.black,
+                          fontSize: 16,
+                        ),
+                        columns: const [
+                          DataColumn(label: Text("Image")),
+                          DataColumn(label: Text("Plant")),
+                          DataColumn(label: Text("Scientific")),
+                          DataColumn(label: Text("Tunisian")),
+                          DataColumn(label: Text("Type")),
+                          DataColumn(label: Text("Actions")),
+                        ],
+                        rows: filteredPlants.map((plant) {
+                          return DataRow(
+                            cells: [
+                              DataCell(
+                                CircleAvatar(
+                                  radius: 25,
+                                  backgroundImage: plant.preview.isNotEmpty
+                                      ? NetworkImage(plant.preview)
+                                      : null,
+                                  child: plant.preview.isEmpty
+                                      ? const Icon(Icons.local_florist)
+                                      : null,
                                 ),
                               ),
-                            ),
-                            DataCell(Text(plant.scientific)),
-                            DataCell(Text(plant.tunisianName)),
-                            DataCell(
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 12,
-                                  vertical: 6,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: Colors.green.shade100,
-                                  borderRadius: BorderRadius.circular(20),
-                                ),
-                                child: Text(
-                                  plant.type
-                                      .split(RegExp(r'[•,;/]'))
-                                      .first
-                                      .trim(),
+                              DataCell(
+                                Text(
+                                  plant.plant,
                                   style: const TextStyle(
-                                    color: Colors.green,
-                                    fontWeight: FontWeight.bold,
+                                    fontWeight: FontWeight.w600,
                                   ),
                                 ),
                               ),
-                            ),
-                            DataCell(
-                              Row(
-                                children: [
-                                  ElevatedButton.icon(
-                                    onPressed: () => showEditPlantDialog(plant),
-                                    icon: const Icon(Icons.edit, size: 18),
-                                    label: const Text("Edit"),
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: Colors.blue,
-                                      foregroundColor: Colors.white,
+                              DataCell(Text(plant.scientific)),
+                              DataCell(Text(plant.tunisianName)),
+                              DataCell(
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                    vertical: 6,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: Colors.green.shade100,
+                                    borderRadius: BorderRadius.circular(20),
+                                  ),
+                                  child: Text(
+                                    plant.type
+                                        .split(RegExp(r'[•,;/]'))
+                                        .first
+                                        .trim(),
+                                    style: const TextStyle(
+                                      color: Colors.green,
+                                      fontWeight: FontWeight.bold,
                                     ),
                                   ),
-                                  const SizedBox(width: 10),
-                                  ElevatedButton.icon(
-                                    onPressed: () => deletePlant(plant),
-                                    icon: const Icon(Icons.delete, size: 18),
-                                    label: const Text("Delete"),
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: Colors.red,
-                                      foregroundColor: Colors.white,
-                                    ),
-                                  ),
-                                ],
+                                ),
                               ),
-                            ),
-                          ],
-                        );
-                      }).toList(),
+                              DataCell(
+                                Row(
+                                  children: [
+                                    ElevatedButton.icon(
+                                      onPressed: () =>
+                                          showEditPlantDialog(plant),
+                                      icon: const Icon(Icons.edit, size: 18),
+                                      label: const Text("Edit"),
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: Colors.blue,
+                                        foregroundColor: Colors.white,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 10),
+                                    ElevatedButton.icon(
+                                      onPressed: () => deletePlant(plant),
+                                      icon: const Icon(Icons.delete, size: 18),
+                                      label: const Text("Delete"),
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: Colors.red,
+                                        foregroundColor: Colors.white,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          );
+                        }).toList(),
+                      ),
                     ),
                   ),
                 ),

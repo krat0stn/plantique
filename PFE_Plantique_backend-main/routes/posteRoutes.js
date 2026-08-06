@@ -51,6 +51,7 @@ router.put(
 
 // feed
 router.get("/", posteController.getAllPostesPublic);
+router.get("/admin/all", verifyToken, isAdmin, posteController.getAllPostesAdmin);
 
 // likes & saves
 router.get("/liked/me", verifyToken, likeController.myLikedPosts);

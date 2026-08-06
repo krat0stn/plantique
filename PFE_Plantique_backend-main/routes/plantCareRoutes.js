@@ -84,9 +84,31 @@ router.get("/:slug", async (req, res) => {
 });
 
 // ---------- POST /api/plant-care (Admin only) ----------
+const { cloudinary } = require("../config/cloudinary");
+
 router.post("/", verifyToken, isAdmin, async (req, res) => {
   try {
-    const plant = await PlantCare.create(req.body);
+    const body = req.body || {};
+    
+    const plantData = {
+      plantName: body.plantName,
+      scientificName: body.scientificName,
+      tunisianName: body.tunisianName,
+      description: body.description,
+      plantType: body.plantType,
+      slug: body.slug,
+    };
+
+    // Upload base64 to Cloudinary
+    if (body.imageBase64) {
+      const uploadResult = await cloudinary.uploader.upload(
+        `data:image/jpeg;base64,${body.imageBase64}`,
+        { folder: "plantique/plants" }
+      );
+      plantData.imageUrl = uploadResult.secure_url;
+    }
+
+    const plant = await PlantCare.create(plantData);
     res.status(201).json({ ok: true, data: plant });
   } catch (err) {
     console.error("Error creating plant:", err);

@@ -13,6 +13,12 @@ class ApiService {
 
   static String? get token => _token; // ← ADD THIS getter
 
+  // ← ADD: clear token on logout
+  static void clearToken() {
+    _token = null;
+    print('Token cleared');
+  }
+
   static Map<String, String> _headers() {
     print('Token in headers: $_token');
     return {
@@ -60,6 +66,54 @@ class ApiService {
 
   static dynamic _handleResponse(http.Response response) {
     final data = jsonDecode(response.body);
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      return data;
+    } else {
+      throw Exception(
+        data['errormessage'] ?? data['message'] ?? 'Request failed',
+      );
+    }
+  }
+
+  static Future<dynamic> postWithFile(
+    String endpoint,
+    Map<String, String> fields,
+    List<http.MultipartFile> files,
+  ) async {
+    return multipartRequest('POST', endpoint, fields, files);
+  }
+
+  // ← ADD: generic multipart request, supports POST/PUT/PATCH with files
+  static Future<dynamic> multipartRequest(
+    String method,
+    String endpoint,
+    Map<String, String> fields,
+    List<http.MultipartFile> files,
+  ) async {
+    final request = http.MultipartRequest(
+      method,
+      Uri.parse('$baseUrl$endpoint'),
+    );
+
+    // Add auth header
+    if (_token != null) {
+      request.headers['Authorization'] = 'Bearer $_token';
+    }
+
+    // Add text fields
+    fields.forEach((key, value) {
+      request.fields[key] = value;
+    });
+
+    // Add files
+    for (final file in files) {
+      request.files.add(file);
+    }
+
+    final response = await request.send();
+    final responseData = await response.stream.bytesToString();
+    final data = jsonDecode(responseData);
+
     if (response.statusCode >= 200 && response.statusCode < 300) {
       return data;
     } else {

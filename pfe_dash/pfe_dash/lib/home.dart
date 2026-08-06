@@ -6,6 +6,8 @@ import 'package:pfe_dash/pages/Blogspage.dart';
 import 'package:pfe_dash/pages/D3PlantsPage.dart';
 import 'package:pfe_dash/pages/ReviewsPage.dart';
 import 'package:pfe_dash/pages/DashboardPage.dart';
+import 'package:pfe_dash/services/api_service.dart';
+import 'package:pfe_dash/main.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -162,15 +164,9 @@ class _HomePageState extends State<HomePage> {
       selectedTileColor: Colors.blue.withValues(alpha: 0.1),
 
       onTap: () {
-        // FIX: Handle logout separately
+        // Handle logout separately
         if (index == 7) {
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(const SnackBar(content: Text('Logging out...')));
-
-          // TODO:
-          // Navigator.pushReplacement(...)
-          // FirebaseAuth.instance.signOut();
+          _logout();
           return;
         }
 
@@ -178,6 +174,38 @@ class _HomePageState extends State<HomePage> {
           _selectedIndex = index;
         });
       },
+    );
+  }
+
+  Future<void> _logout() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Log out?'),
+        content: const Text('You will need to sign in again to continue.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('Logout', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
+    ApiService.clearToken();
+
+    if (!mounted) return;
+
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => const LoginPage()),
+      (route) => false,
     );
   }
 }
