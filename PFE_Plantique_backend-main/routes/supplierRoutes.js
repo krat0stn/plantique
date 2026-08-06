@@ -12,6 +12,7 @@ const {
   list,
   getById,
   withStats,
+  adminList,
   create,
   update,
   remove,
@@ -20,6 +21,10 @@ const {
 // Public
 router.get("/with-stats", withStats);
 router.get("/",    list);
+
+// Admin (must come before "/:id" so "admin" isn't treated as an id)
+router.get("/admin", verifyToken, isAdmin, adminList);
+
 router.get("/:id", getById);
 
 // Admin

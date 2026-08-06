@@ -128,6 +128,54 @@ class _PostsPageState extends State<PostsPage> {
     }
   }
 
+  // ── RESET POST TO PENDING ──────────────────────────────────────
+
+  // ── EDIT DECISION (fix a mistaken approve/decline) ─────────────
+  void showEditDecisionDialog(PostModel post) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text("Edit decision"),
+          content: Text(
+            "This post is currently \"${post.status}\". Choose a new status:",
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text("Cancel"),
+            ),
+
+            if (post.status != "declined")
+              ElevatedButton(
+                onPressed: () {
+                  Navigator.pop(context);
+                  declinePost(post.id);
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.orange,
+                  foregroundColor: Colors.white,
+                ),
+                child: const Text("Decline"),
+              ),
+            if (post.status != "approved")
+              ElevatedButton(
+                onPressed: () {
+                  Navigator.pop(context);
+                  approvePost(post.id);
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.green,
+                  foregroundColor: Colors.white,
+                ),
+                child: const Text("Approve"),
+              ),
+          ],
+        );
+      },
+    );
+  }
+
   // ── DELETE POST ─────────────────────────────────────────────────
   Future<void> deletePost(PostModel post) async {
     try {
@@ -448,6 +496,21 @@ class _PostsPageState extends State<PostsPage> {
                                         label: const Text("Decline"),
                                         style: ElevatedButton.styleFrom(
                                           backgroundColor: Colors.orange,
+                                          foregroundColor: Colors.white,
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 8,
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 6),
+                                    ] else ...[
+                                      ElevatedButton.icon(
+                                        onPressed: () =>
+                                            showEditDecisionDialog(post),
+                                        icon: const Icon(Icons.edit, size: 16),
+                                        label: const Text("Edit"),
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: Colors.blueGrey,
                                           foregroundColor: Colors.white,
                                           padding: const EdgeInsets.symmetric(
                                             horizontal: 8,

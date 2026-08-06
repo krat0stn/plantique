@@ -29,6 +29,7 @@ mustBeFn(isAdmin, "isAdmin");
   "deleteSinglePoste",
   "approve",
   "decline",
+  "setPending",
 ].forEach((n) => mustBeFn(posteController[n], `posteController.${n}`));
 ["create", "list", "remove"].forEach((n) =>
   mustBeFn(commentController[n], `commentController.${n}`)
@@ -77,6 +78,7 @@ router.get("/:id", posteController.getPosteById);
 router.delete("/:id", verifyToken, posteController.deleteSinglePoste);
 router.put("/:id/approve", verifyToken, isAdmin, posteController.approve);
 router.put("/:id/decline", verifyToken, isAdmin, posteController.decline);
+router.put("/:id/pending", verifyToken, isAdmin, posteController.setPending);
 // routes/posteRoutes.js
 router.get("/mine", verifyToken, ctrl.listMine);
 

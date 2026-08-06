@@ -44,6 +44,32 @@ class ArModel {
   }
 }
 
+class PlantOption {
+  final String id;
+  final String name;
+  final String scientificName;
+  final String type;
+  final String imageUrl;
+
+  PlantOption({
+    required this.id,
+    required this.name,
+    required this.scientificName,
+    required this.type,
+    required this.imageUrl,
+  });
+
+  factory PlantOption.fromJson(Map<String, dynamic> json) {
+    return PlantOption(
+      id: json['_id']?.toString() ?? json['id']?.toString() ?? '',
+      name: json['plantName']?.toString() ?? '',
+      scientificName: json['scientificName']?.toString() ?? '',
+      type: json['plantType']?.toString() ?? '',
+      imageUrl: json['imageUrl']?.toString() ?? '',
+    );
+  }
+}
+
 class D3PlantsPage extends StatefulWidget {
   const D3PlantsPage({super.key});
 
@@ -62,10 +88,25 @@ class _D3PlantsPageState extends State<D3PlantsPage> {
   PlatformFile? selectedModelFile;
   PlatformFile? selectedThumbFile;
 
+  List<PlantOption> plantOptions = [];
+
   @override
   void initState() {
     super.initState();
     loadModels();
+    loadPlantOptions();
+  }
+
+  Future<void> loadPlantOptions() async {
+    try {
+      final data = await ApiService.get('/plant-care');
+      final List<dynamic> list = data['data'] ?? [];
+      setState(() {
+        plantOptions = list.map((p) => PlantOption.fromJson(p)).toList();
+      });
+    } catch (_) {
+      // Plant picker is best-effort; the rest of the page still works
+    }
   }
 
   Future<void> loadModels({String q = ''}) async {
@@ -238,6 +279,112 @@ class _D3PlantsPageState extends State<D3PlantsPage> {
     }
   }
 
+  Future<void> pickPlant(void Function(PlantOption plant) onSelected) async {
+    final plantSearchController = TextEditingController();
+    List<PlantOption> filtered = plantOptions;
+
+    await showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setPickerState) {
+            void filter(String query) {
+              setPickerState(() {
+                final q = query.toLowerCase();
+                filtered = plantOptions.where((p) {
+                  return p.name.toLowerCase().contains(q) ||
+                      p.scientificName.toLowerCase().contains(q);
+                }).toList();
+              });
+            }
+
+            return AlertDialog(
+              title: const Text("Choose a plant"),
+              content: SizedBox(
+                width: 420,
+                height: 480,
+                child: Column(
+                  children: [
+                    TextField(
+                      controller: plantSearchController,
+                      autofocus: true,
+                      onChanged: filter,
+                      decoration: InputDecoration(
+                        hintText: "Search plants...",
+                        prefixIcon: const Icon(Icons.search),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        isDense: true,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Expanded(
+                      child: plantOptions.isEmpty
+                          ? const Center(
+                              child: Text(
+                                "No plants found. Add one on the Plants page first.",
+                                textAlign: TextAlign.center,
+                                style: TextStyle(color: Colors.grey),
+                              ),
+                            )
+                          : filtered.isEmpty
+                          ? const Center(
+                              child: Text(
+                                "No matches",
+                                style: TextStyle(color: Colors.grey),
+                              ),
+                            )
+                          : ListView.separated(
+                              itemCount: filtered.length,
+                              separatorBuilder: (_, __) =>
+                                  const Divider(height: 1),
+                              itemBuilder: (context, index) {
+                                final plant = filtered[index];
+                                return ListTile(
+                                  leading: CircleAvatar(
+                                    backgroundColor: Colors.green.shade50,
+                                    backgroundImage: plant.imageUrl.isNotEmpty
+                                        ? NetworkImage(plant.imageUrl)
+                                        : null,
+                                    child: plant.imageUrl.isEmpty
+                                        ? const Icon(
+                                            Icons.local_florist,
+                                            color: Colors.green,
+                                          )
+                                        : null,
+                                  ),
+                                  title: Text(plant.name),
+                                  subtitle: Text(
+                                    plant.scientificName.isNotEmpty
+                                        ? plant.scientificName
+                                        : plant.type,
+                                    style: const TextStyle(fontSize: 12),
+                                  ),
+                                  onTap: () {
+                                    Navigator.pop(context);
+                                    onSelected(plant);
+                                  },
+                                );
+                              },
+                            ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text("Cancel"),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
   void showAddModelDialog() {
     final nameController = TextEditingController();
     final plantController = TextEditingController();
@@ -294,9 +441,17 @@ class _D3PlantsPageState extends State<D3PlantsPage> {
                       const SizedBox(height: 12),
                       TextField(
                         controller: plantController,
+                        readOnly: true,
+                        onTap: () {
+                          pickPlant((plant) {
+                            plantController.text = plant.name;
+                          });
+                        },
                         decoration: const InputDecoration(
-                          labelText: "Plant Name",
+                          labelText: "Plant *",
+                          hintText: "Tap to choose an existing plant",
                           border: OutlineInputBorder(),
+                          suffixIcon: Icon(Icons.arrow_drop_down),
                         ),
                       ),
                       const SizedBox(height: 12),
@@ -321,6 +476,12 @@ class _D3PlantsPageState extends State<D3PlantsPage> {
                     if (nameController.text.isEmpty) {
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(content: Text("Name is required")),
+                      );
+                      return;
+                    }
+                    if (plantController.text.isEmpty) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text("Please choose a plant")),
                       );
                       return;
                     }
@@ -397,9 +558,17 @@ class _D3PlantsPageState extends State<D3PlantsPage> {
                       const SizedBox(height: 12),
                       TextField(
                         controller: plantController,
+                        readOnly: true,
+                        onTap: () {
+                          pickPlant((plant) {
+                            plantController.text = plant.name;
+                          });
+                        },
                         decoration: const InputDecoration(
-                          labelText: "Plant Name",
+                          labelText: "Plant",
+                          hintText: "Tap to choose an existing plant",
                           border: OutlineInputBorder(),
+                          suffixIcon: Icon(Icons.arrow_drop_down),
                         ),
                       ),
                       const SizedBox(height: 12),

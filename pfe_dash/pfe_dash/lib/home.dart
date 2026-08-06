@@ -6,6 +6,7 @@ import 'package:pfe_dash/pages/Blogspage.dart';
 import 'package:pfe_dash/pages/D3PlantsPage.dart';
 import 'package:pfe_dash/pages/ReviewsPage.dart';
 import 'package:pfe_dash/pages/DashboardPage.dart';
+import 'package:pfe_dash/pages/SuppliersPage.dart';
 import 'package:pfe_dash/services/api_service.dart';
 import 'package:pfe_dash/main.dart';
 
@@ -28,6 +29,7 @@ class _HomePageState extends State<HomePage> {
     const BlogsPage(), // 4
     const D3PlantsPage(), // 5
     const ReviewsPage(), // 6
+    const SuppliersPage(), // 7
   ];
 
   @override
@@ -122,11 +124,18 @@ class _HomePageState extends State<HomePage> {
                   _isSidebarExpanded,
                 ),
 
+                _buildMenuItem(
+                  7,
+                  const Icon(Icons.storefront, color: Colors.black),
+                  'Suppliers',
+                  _isSidebarExpanded,
+                ),
+
                 const Spacer(),
 
                 // FIX: Logout is NOT a page
                 _buildMenuItem(
-                  7,
+                  8,
                   Image.asset('assets/images/logout.png', width: 24),
                   'Logout',
                   _isSidebarExpanded,
@@ -165,7 +174,7 @@ class _HomePageState extends State<HomePage> {
 
       onTap: () {
         // Handle logout separately
-        if (index == 7) {
+        if (index == 8) {
           _logout();
           return;
         }

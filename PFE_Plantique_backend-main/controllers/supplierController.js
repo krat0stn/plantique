@@ -94,6 +94,48 @@ exports.withStats = async (_req, res) => {
   }
 };
 
+// GET /api/suppliers/admin  (admin only — includes inactive/suspended, with product counts)
+exports.adminList = async (req, res) => {
+  try {
+    const { q } = req.query;
+    const match = {};
+    if (q) {
+      match.$or = [
+        { shopName:  { $regex: q, $options: "i" } },
+        { firstName: { $regex: q, $options: "i" } },
+        { lastName:  { $regex: q, $options: "i" } },
+        { email:     { $regex: q, $options: "i" } },
+      ];
+    }
+
+    const suppliers = await Supplier.aggregate([
+      { $match: match },
+      {
+        $lookup: {
+          from: "products",
+          let: { sid: "$_id" },
+          pipeline: [
+            { $match: { $expr: { $eq: ["$supplier", "$$sid"] } } },
+          ],
+          as: "products",
+        },
+      },
+      {
+        $addFields: {
+          productCount: { $size: "$products" },
+        },
+      },
+      { $project: { products: 0 } },
+      { $sort: { shopName: 1 } },
+    ]);
+
+    res.json(suppliers);
+  } catch (err) {
+    console.error("adminList error:", err);
+    res.status(500).json({ error: err.message });
+  }
+};
+
 // ── Admin writes ───────────────────────────────────────────────────────────────
 
 // POST /api/suppliers

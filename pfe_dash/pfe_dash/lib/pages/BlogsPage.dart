@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:pfe_dash/services/api_service.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:http/http.dart' as http;
-import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 
 // ─── MODEL ──────────────────────────────────────────────
@@ -12,6 +11,7 @@ class BlogModel {
   final String content;
   final String image;
   final String author;
+  final String status;
   final DateTime date;
 
   BlogModel({
@@ -20,6 +20,7 @@ class BlogModel {
     required this.content,
     required this.image,
     required this.author,
+    required this.status,
     required this.date,
   });
 
@@ -45,6 +46,7 @@ class BlogModel {
       content: json['content']?.toString() ?? '',
       image: json['imageUrl']?.toString() ?? '',
       author: authorName,
+      status: json['status']?.toString() ?? 'approved',
       date: parsedDate,
     );
   }
@@ -69,6 +71,10 @@ class _BlogsPageState extends State<BlogsPage> {
   String? error;
 
   final TextEditingController searchController = TextEditingController();
+  String selectedType = "All";
+
+  // Same statuses as posts: pending, approved, declined
+  final List<String> blogTypes = ["All", "pending", "approved", "declined"];
 
   @override
   void initState() {
@@ -76,7 +82,7 @@ class _BlogsPageState extends State<BlogsPage> {
     loadBlogs();
   }
 
-  // ── LIST ───────────────────────────────────────────────
+  // ── LOAD BLOGS ──────────────────────────────────────────
   Future<void> loadBlogs() async {
     setState(() {
       loading = true;
@@ -84,18 +90,11 @@ class _BlogsPageState extends State<BlogsPage> {
     });
 
     try {
-      final query = searchController.text.trim().isNotEmpty
-          ? '?q=${Uri.encodeComponent(searchController.text.trim())}'
-          : '';
+      final data = await ApiService.get('/admin/blogs?limit=100');
+      final List<dynamic> blogList = data is List ? data : data['data'] ?? [];
 
-      // ✅ FIXED: was '/blogs/admin' → now '/admin/blogs'
-      final data = await ApiService.get('/admin/blogs$query');
-      final List<dynamic> blogList = data['data'] ?? [];
-
-      setState(() {
-        blogs = blogList.map((b) => BlogModel.fromJson(b)).toList();
-        filteredBlogs = List.from(blogs);
-      });
+      blogs = blogList.map((b) => BlogModel.fromJson(b)).toList();
+      filterBlogs();
     } catch (e) {
       setState(() => error = 'Failed to load blogs: $e');
     } finally {
@@ -103,9 +102,100 @@ class _BlogsPageState extends State<BlogsPage> {
     }
   }
 
-  void searchBlogs() => loadBlogs();
+  void filterBlogs() {
+    setState(() {
+      filteredBlogs = blogs.where((blog) {
+        final search = searchController.text.toLowerCase();
+        final matchesSearch =
+            blog.title.toLowerCase().contains(search) ||
+            blog.content.toLowerCase().contains(search) ||
+            blog.author.toLowerCase().contains(search) ||
+            blog.status.toLowerCase().contains(search);
 
-  // ── DELETE ─────────────────────────────────────────────
+        final matchesType =
+            selectedType == "All" || blog.status == selectedType;
+
+        return matchesSearch && matchesType;
+      }).toList();
+    });
+  }
+
+  // ── APPROVE BLOG ────────────────────────────────────────
+  Future<void> approveBlog(String id) async {
+    try {
+      await ApiService.put('/admin/blogs/$id/approve', {});
+      await loadBlogs();
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text("Blog approved")));
+    } catch (e) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text("Failed to approve: $e")));
+    }
+  }
+
+  // ── DECLINE BLOG ────────────────────────────────────────
+  Future<void> declineBlog(String id) async {
+    try {
+      await ApiService.put('/admin/blogs/$id/decline', {});
+      await loadBlogs();
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text("Blog declined")));
+    } catch (e) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text("Failed to decline: $e")));
+    }
+  }
+
+  // ── EDIT DECISION (fix a mistaken approve/decline) ──────
+  void showEditDecisionDialog(BlogModel blog) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text("Edit decision"),
+          content: Text(
+            "This blog is currently \"${blog.status}\". Choose a new status:",
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text("Cancel"),
+            ),
+            if (blog.status != "declined")
+              ElevatedButton(
+                onPressed: () {
+                  Navigator.pop(context);
+                  declineBlog(blog.id);
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.orange,
+                  foregroundColor: Colors.white,
+                ),
+                child: const Text("Decline"),
+              ),
+            if (blog.status != "approved")
+              ElevatedButton(
+                onPressed: () {
+                  Navigator.pop(context);
+                  approveBlog(blog.id);
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.green,
+                  foregroundColor: Colors.white,
+                ),
+                child: const Text("Approve"),
+              ),
+          ],
+        );
+      },
+    );
+  }
+
+  // ── DELETE ───────────────────────────────────────────────
   Future<void> deleteBlog(BlogModel blog) async {
     final confirm = await showDialog<bool>(
       context: context,
@@ -128,11 +218,10 @@ class _BlogsPageState extends State<BlogsPage> {
     if (confirm != true) return;
 
     try {
-      // ✅ FIXED: was '/blogs/${blog.id}' → now '/admin/blogs/${blog.id}'
       await ApiService.delete('/admin/blogs/${blog.id}');
       setState(() {
         blogs.removeWhere((b) => b.id == blog.id);
-        filteredBlogs.removeWhere((b) => b.id == blog.id);
+        filterBlogs();
       });
       ScaffoldMessenger.of(
         context,
@@ -144,7 +233,7 @@ class _BlogsPageState extends State<BlogsPage> {
     }
   }
 
-  // ── TOKEN HELPER (reads same place as ApiService) ─────
+  // ── TOKEN HELPER (reads same place as ApiService) ───────
   Future<String?> _getToken() async {
     return ApiService.token;
   }
@@ -216,7 +305,7 @@ class _BlogsPageState extends State<BlogsPage> {
     }
   }
 
-  // ── ADD / EDIT DIALOG ──────────────────────────────────
+  // ── ADD / EDIT CONTENT DIALOG ───────────────────────────
   void openBlogForm({BlogModel? existing}) {
     final titleController = TextEditingController(text: existing?.title);
     final contentController = TextEditingController(text: existing?.content);
@@ -390,8 +479,69 @@ class _BlogsPageState extends State<BlogsPage> {
     );
   }
 
+  void previewImage(BlogModel blog) {
+    if (blog.image.isEmpty) return;
+    showDialog(
+      context: context,
+      builder: (context) {
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          child: Stack(
+            alignment: Alignment.topRight,
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: Image.network(
+                  blog.image,
+                  fit: BoxFit.contain,
+                  errorBuilder: (context, error, stackTrace) => Container(
+                    width: 300,
+                    height: 300,
+                    color: Colors.grey.shade300,
+                    child: const Icon(Icons.broken_image, size: 60),
+                  ),
+                ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.close, color: Colors.white),
+                style: IconButton.styleFrom(backgroundColor: Colors.black45),
+                onPressed: () => Navigator.pop(context),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Color _statusColor(String status) {
+    switch (status) {
+      case "approved":
+        return Colors.green;
+      case "declined":
+        return Colors.red;
+      case "pending":
+        return Colors.orange;
+      default:
+        return Colors.grey;
+    }
+  }
+
+  Color _statusBackground(String status) {
+    switch (status) {
+      case "approved":
+        return Colors.green.shade100;
+      case "declined":
+        return Colors.red.shade100;
+      case "pending":
+        return Colors.orange.shade100;
+      default:
+        return Colors.grey.shade200;
+    }
+  }
+
   String _formatDate(DateTime date) {
-    return "${date.month}/${date.day}/${date.year}";
+    return "${date.day}/${date.month}/${date.year}";
   }
 
   @override
@@ -431,232 +581,260 @@ class _BlogsPageState extends State<BlogsPage> {
             const SizedBox(height: 20),
             Row(
               children: [
-                SizedBox(
-                  width: 320,
+                Expanded(
+                  flex: 3,
                   child: TextField(
                     controller: searchController,
-                    onSubmitted: (_) => searchBlogs(),
+                    onChanged: (_) => filterBlogs(),
                     decoration: InputDecoration(
-                      hintText: "Search title or content",
+                      hintText: "Search blogs...",
+                      prefixIcon: const Icon(Icons.search),
                       filled: true,
                       fillColor: Colors.white,
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 14,
-                      ),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(10),
-                        borderSide: BorderSide(color: Colors.grey.shade300),
-                      ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10),
-                        borderSide: BorderSide(color: Colors.grey.shade300),
                       ),
                     ),
                   ),
                 ),
-                const SizedBox(width: 12),
-                ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: primaryColor,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 24,
-                      vertical: 14,
+                const SizedBox(width: 15),
+                Expanded(
+                  child: DropdownButtonFormField<String>(
+                    value: selectedType,
+                    decoration: InputDecoration(
+                      filled: true,
+                      fillColor: Colors.white,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
                     ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
+                    items: blogTypes.map((type) {
+                      return DropdownMenuItem(value: type, child: Text(type));
+                    }).toList(),
+                    onChanged: (value) {
+                      setState(() {
+                        selectedType = value!;
+                        filterBlogs();
+                      });
+                    },
                   ),
-                  onPressed: loading ? null : searchBlogs,
-                  child: const Text("Search"),
+                ),
+                const SizedBox(width: 15),
+                ElevatedButton.icon(
+                  onPressed: loadBlogs,
+                  icon: const Icon(Icons.refresh),
+                  label: const Text("Refresh"),
                 ),
               ],
             ),
             const SizedBox(height: 25),
-            Expanded(
-              child: loading
-                  ? const Center(
-                      child: CircularProgressIndicator(color: primaryColor),
-                    )
-                  : error != null
-                  ? Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Text(
-                            error!,
-                            style: const TextStyle(color: Colors.red),
-                          ),
-                          ElevatedButton(
-                            onPressed: loadBlogs,
-                            child: const Text("Retry"),
-                          ),
-                        ],
+
+            if (loading)
+              const Expanded(child: Center(child: CircularProgressIndicator()))
+            else if (error != null)
+              Expanded(
+                child: Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(error!, style: const TextStyle(color: Colors.red)),
+                      ElevatedButton(
+                        onPressed: loadBlogs,
+                        child: const Text("Retry"),
                       ),
-                    )
-                  : filteredBlogs.isEmpty
-                  ? const Center(child: Text("No blogs found"))
-                  : GridView.builder(
-                      itemCount: filteredBlogs.length,
-                      gridDelegate:
-                          const SliverGridDelegateWithFixedCrossAxisCount(
-                            crossAxisCount: 2,
-                            crossAxisSpacing: 20,
-                            mainAxisSpacing: 20,
-                            childAspectRatio: 0.95,
-                          ),
-                      itemBuilder: (context, index) {
-                        final blog = filteredBlogs[index];
-                        return _BlogCard(
-                          blog: blog,
-                          formattedDate: _formatDate(blog.date),
-                          onEdit: () => openBlogForm(existing: blog),
-                          onDelete: () => deleteBlog(blog),
-                          editColor: editColor,
-                          deleteColor: deleteColor,
-                        );
-                      },
+                    ],
+                  ),
+                ),
+              )
+            else if (filteredBlogs.isEmpty)
+              const Expanded(child: Center(child: Text("No blogs found")))
+            else
+              Expanded(
+                child: Card(
+                  elevation: 5,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(15),
+                  ),
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.vertical,
+                    child: SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: DataTable(
+                        headingRowHeight: 60,
+                        dataRowMinHeight: 80,
+                        dataRowMaxHeight: 100,
+                        columnSpacing: 30,
+                        horizontalMargin: 20,
+                        headingTextStyle: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: Colors.black,
+                          fontSize: 16,
+                        ),
+                        columns: const [
+                          DataColumn(label: Text("Image")),
+                          DataColumn(label: Text("Title")),
+                          DataColumn(label: Text("Content")),
+                          DataColumn(label: Text("Author")),
+                          DataColumn(label: Text("Status")),
+                          DataColumn(label: Text("Date")),
+                          DataColumn(label: Text("Actions")),
+                        ],
+                        rows: filteredBlogs.map((blog) {
+                          return DataRow(
+                            cells: [
+                              DataCell(
+                                blog.image.isNotEmpty
+                                    ? GestureDetector(
+                                        onTap: () => previewImage(blog),
+                                        child: ClipRRect(
+                                          borderRadius: BorderRadius.circular(
+                                            8,
+                                          ),
+                                          child: Image.network(
+                                            blog.image,
+                                            width: 50,
+                                            height: 50,
+                                            fit: BoxFit.cover,
+                                            errorBuilder:
+                                                (context, error, stackTrace) =>
+                                                    Container(
+                                                      width: 50,
+                                                      height: 50,
+                                                      color:
+                                                          Colors.grey.shade300,
+                                                      child: const Icon(
+                                                        Icons.broken_image,
+                                                        size: 20,
+                                                      ),
+                                                    ),
+                                          ),
+                                        ),
+                                      )
+                                    : const CircleAvatar(
+                                        radius: 25,
+                                        child: Icon(Icons.image_not_supported),
+                                      ),
+                              ),
+                              DataCell(
+                                SizedBox(
+                                  width: 140,
+                                  child: Text(
+                                    blog.title,
+                                    overflow: TextOverflow.ellipsis,
+                                    maxLines: 2,
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              DataCell(
+                                SizedBox(
+                                  width: 180,
+                                  child: Text(
+                                    blog.content,
+                                    overflow: TextOverflow.ellipsis,
+                                    maxLines: 2,
+                                  ),
+                                ),
+                              ),
+                              DataCell(Text(blog.author)),
+                              DataCell(
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                    vertical: 6,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: _statusBackground(blog.status),
+                                    borderRadius: BorderRadius.circular(20),
+                                  ),
+                                  child: Text(
+                                    blog.status,
+                                    style: TextStyle(
+                                      color: _statusColor(blog.status),
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              DataCell(Text(_formatDate(blog.date))),
+                              DataCell(
+                                Row(
+                                  children: [
+                                    if (blog.status == "pending") ...[
+                                      ElevatedButton.icon(
+                                        onPressed: () => approveBlog(blog.id),
+                                        icon: const Icon(Icons.check, size: 16),
+                                        label: const Text("Approve"),
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: Colors.green,
+                                          foregroundColor: Colors.white,
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 8,
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 6),
+                                      ElevatedButton.icon(
+                                        onPressed: () => declineBlog(blog.id),
+                                        icon: const Icon(Icons.close, size: 16),
+                                        label: const Text("Decline"),
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: Colors.orange,
+                                          foregroundColor: Colors.white,
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 8,
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 6),
+                                    ] else ...[
+                                      ElevatedButton.icon(
+                                        onPressed: () =>
+                                            showEditDecisionDialog(blog),
+                                        icon: const Icon(Icons.edit, size: 16),
+                                        label: const Text("Edit"),
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: Colors.blueGrey,
+                                          foregroundColor: Colors.white,
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 8,
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 6),
+                                    ],
+                                    IconButton(
+                                      onPressed: () =>
+                                          openBlogForm(existing: blog),
+                                      icon: const Icon(
+                                        Icons.edit_note,
+                                        color: editColor,
+                                      ),
+                                      tooltip: "Edit content",
+                                    ),
+                                    IconButton(
+                                      onPressed: () => deleteBlog(blog),
+                                      icon: const Icon(
+                                        Icons.delete,
+                                        color: Colors.red,
+                                      ),
+                                      tooltip: "Delete",
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          );
+                        }).toList(),
+                      ),
                     ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// ─── UI COMPONENTS (unchanged) ──────────────────────────
-class _BlogCard extends StatelessWidget {
-  final BlogModel blog;
-  final String formattedDate;
-  final VoidCallback onEdit;
-  final VoidCallback onDelete;
-  final Color editColor;
-  final Color deleteColor;
-
-  const _BlogCard({
-    required this.blog,
-    required this.formattedDate,
-    required this.onEdit,
-    required this.onDelete,
-    required this.editColor,
-    required this.deleteColor,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Expanded(
-            child: Center(
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(8),
-                child: Image.network(
-                  blog.image,
-                  fit: BoxFit.cover,
-                  width: double.infinity,
-                  errorBuilder: (context, error, stackTrace) => Container(
-                    color: Colors.grey.shade200,
-                    child: const Icon(Icons.image_not_supported, size: 40),
                   ),
                 ),
               ),
-            ),
-          ),
-          const SizedBox(height: 14),
-          Text(
-            blog.title,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            blog.content,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              color: Colors.grey.shade700,
-              fontSize: 13,
-              height: 1.4,
-            ),
-          ),
-          const SizedBox(height: 14),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Row(
-                children: [
-                  Text(
-                    blog.author,
-                    style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
-                  ),
-                  const SizedBox(width: 12),
-                  Text(
-                    formattedDate,
-                    style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
-                  ),
-                ],
-              ),
-              Row(
-                children: [
-                  _RoundIconButton(
-                    icon: Icons.edit,
-                    color: editColor,
-                    onPressed: onEdit,
-                  ),
-                  const SizedBox(width: 8),
-                  _RoundIconButton(
-                    icon: Icons.delete,
-                    color: deleteColor,
-                    onPressed: onDelete,
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _RoundIconButton extends StatelessWidget {
-  final IconData icon;
-  final Color color;
-  final VoidCallback onPressed;
-
-  const _RoundIconButton({
-    required this.icon,
-    required this.color,
-    required this.onPressed,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onPressed,
-      borderRadius: BorderRadius.circular(20),
-      child: Container(
-        width: 34,
-        height: 34,
-        decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-        child: Icon(icon, color: Colors.white, size: 16),
+          ],
+        ),
       ),
     );
   }

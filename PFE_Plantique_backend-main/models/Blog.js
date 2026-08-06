@@ -9,11 +9,17 @@ const blogSchema = new Schema(
     imageUrl: { type: String, trim: true },
     imagePublicId: { type: String, trim: true },
     author: { type: Schema.Types.ObjectId, ref: "User", required: true },
+    status: {
+      type: String,
+      enum: ["pending", "approved", "declined"],
+      default: "pending",
+    },
   },
   { timestamps: true },
 );
 
 blogSchema.index({ createdAt: -1 });
+blogSchema.index({ status: 1, createdAt: -1 });
 blogSchema.index({ title: "text", content: "text", excerpt: "text" });
 
 blogSchema.pre("validate", function (next) {

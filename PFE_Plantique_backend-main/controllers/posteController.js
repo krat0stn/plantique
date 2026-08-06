@@ -217,6 +217,23 @@ exports.decline = async (req, res) => {
   }
 };
 
+exports.setPending = async (req, res) => {
+  try {
+    const updated = await Poste.findByIdAndUpdate(
+      req.params.id,
+      { $set: { status: "pending" } },
+      { new: true }
+    );
+    if (!updated)
+      return res.status(404).json({ errormessage: "Poste introuvable" });
+    return res
+      .status(200)
+      .json({ successmessage: "Poste remis en attente", data: updated });
+  } catch (error) {
+    return res.status(500).json({ errormessage: "Erreur: " + error.message });
+  }
+};
+
 // PUBLIC FEED — approved only
 exports.getAllPostesPublic = async (req, res) => {
   try {

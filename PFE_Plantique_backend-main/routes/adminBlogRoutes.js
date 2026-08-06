@@ -24,6 +24,8 @@ router.put(
   upload.single("image"),
   blogController.update
 );
+router.put("/:id/approve", verifyToken, isAdmin, blogController.approve);
+router.put("/:id/decline", verifyToken, isAdmin, blogController.decline);
 router.delete("/:id", verifyToken, isAdmin, blogController.remove);
 router.delete("/:id/image", verifyToken, isAdmin, blogController.removeImage);
 

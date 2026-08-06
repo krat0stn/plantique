@@ -14,7 +14,7 @@ exports.listPublic = async (req, res) => {
     const skip = (page - 1) * limit;
     const { q } = req.query;
 
-    const filter = {};
+    const filter = { status: "approved" };
     if (q && q.trim()) filter.$text = { $search: q.trim() };
 
     const [items, total] = await Promise.all([
@@ -42,7 +42,7 @@ exports.getPublicById = async (req, res) => {
       "author",
       "username picture",
     );
-    if (!found)
+    if (!found || found.status !== "approved")
       return res.status(404).json({ errormessage: "Blog introuvable" });
 
     return res
@@ -181,6 +181,44 @@ exports.remove = async (req, res) => {
     return res
       .status(200)
       .json({ successmessage: "Blog supprimé", data: blog });
+  } catch (error) {
+    return res.status(500).json({ errormessage: "Erreur: " + error.message });
+  }
+};
+
+// PUT /api/admin/blogs/:id/approve
+exports.approve = async (req, res) => {
+  try {
+    const updated = await Blog.findByIdAndUpdate(
+      req.params.id,
+      { $set: { status: "approved" } },
+      { new: true },
+    );
+    if (!updated)
+      return res.status(404).json({ errormessage: "Blog introuvable" });
+
+    return res
+      .status(200)
+      .json({ successmessage: "Blog approuvé", data: updated });
+  } catch (error) {
+    return res.status(500).json({ errormessage: "Erreur: " + error.message });
+  }
+};
+
+// PUT /api/admin/blogs/:id/decline
+exports.decline = async (req, res) => {
+  try {
+    const updated = await Blog.findByIdAndUpdate(
+      req.params.id,
+      { $set: { status: "declined" } },
+      { new: true },
+    );
+    if (!updated)
+      return res.status(404).json({ errormessage: "Blog introuvable" });
+
+    return res
+      .status(200)
+      .json({ successmessage: "Blog refusé", data: updated });
   } catch (error) {
     return res.status(500).json({ errormessage: "Erreur: " + error.message });
   }
