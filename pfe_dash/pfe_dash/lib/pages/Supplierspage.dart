@@ -8,6 +8,7 @@ class SupplierModel {
   final String firstName;
   final String lastName;
   final String shopName;
+  final String shopType;
   final String email;
   final String phone;
   final String location;
@@ -22,6 +23,7 @@ class SupplierModel {
     required this.firstName,
     required this.lastName,
     required this.shopName,
+    required this.shopType,
     required this.email,
     required this.phone,
     required this.location,
@@ -45,6 +47,7 @@ class SupplierModel {
       firstName: json['firstName']?.toString() ?? '',
       lastName: json['lastName']?.toString() ?? '',
       shopName: json['shopName']?.toString() ?? '',
+      shopType: json['shopType']?.toString() ?? '',
       email: json['email']?.toString() ?? '',
       phone: json['phone']?.toString() ?? '',
       location: json['location']?.toString() ?? '',
@@ -144,6 +147,7 @@ class _SuppliersPageState extends State<SuppliersPage> {
     required String firstName,
     required String lastName,
     required String shopName,
+    required String shopType,
     required String email,
     required String phone,
     required String location,
@@ -154,6 +158,7 @@ class _SuppliersPageState extends State<SuppliersPage> {
         'firstName': firstName,
         'lastName': lastName,
         'shopName': shopName,
+        'shopType': shopType,
         'email': email,
         'phone': phone,
         'location': location,
@@ -177,6 +182,7 @@ class _SuppliersPageState extends State<SuppliersPage> {
     required String firstName,
     required String lastName,
     required String shopName,
+    required String shopType,
     required String email,
     required String phone,
     required String location,
@@ -188,6 +194,7 @@ class _SuppliersPageState extends State<SuppliersPage> {
         'firstName': firstName,
         'lastName': lastName,
         'shopName': shopName,
+        'shopType': shopType,
         'email': email,
         'phone': phone,
         'location': location,
@@ -276,6 +283,7 @@ class _SuppliersPageState extends State<SuppliersPage> {
     final firstNameController = TextEditingController();
     final lastNameController = TextEditingController();
     final shopNameController = TextEditingController();
+    final shopTypeController = TextEditingController();
     final emailController = TextEditingController();
     final phoneController = TextEditingController();
     final locationController = TextEditingController();
@@ -312,6 +320,15 @@ class _SuppliersPageState extends State<SuppliersPage> {
                         controller: shopNameController,
                         decoration: const InputDecoration(
                           labelText: "Shop name *",
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: shopTypeController,
+                        decoration: const InputDecoration(
+                          labelText: "Shop type",
+                          hintText: "e.g. Retail, Wholesale, Dropshipping",
                           border: OutlineInputBorder(),
                         ),
                       ),
@@ -400,6 +417,7 @@ class _SuppliersPageState extends State<SuppliersPage> {
                       firstName: firstNameController.text,
                       lastName: lastNameController.text,
                       shopName: shopNameController.text,
+                      shopType: shopTypeController.text,
                       email: emailController.text,
                       phone: phoneController.text,
                       location: locationController.text,
@@ -420,6 +438,7 @@ class _SuppliersPageState extends State<SuppliersPage> {
     final firstNameController = TextEditingController(text: supplier.firstName);
     final lastNameController = TextEditingController(text: supplier.lastName);
     final shopNameController = TextEditingController(text: supplier.shopName);
+    final shopTypeController = TextEditingController(text: supplier.shopType);
     final emailController = TextEditingController(text: supplier.email);
     final phoneController = TextEditingController(text: supplier.phone);
     final locationController = TextEditingController(text: supplier.location);
@@ -457,6 +476,15 @@ class _SuppliersPageState extends State<SuppliersPage> {
                         controller: shopNameController,
                         decoration: const InputDecoration(
                           labelText: "Shop name",
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: shopTypeController,
+                        decoration: const InputDecoration(
+                          labelText: "Shop type",
+                          hintText: "e.g. Retail, Wholesale, Dropshipping",
                           border: OutlineInputBorder(),
                         ),
                       ),
@@ -547,6 +575,7 @@ class _SuppliersPageState extends State<SuppliersPage> {
                       firstName: firstNameController.text,
                       lastName: lastNameController.text,
                       shopName: shopNameController.text,
+                      shopType: shopTypeController.text,
                       email: emailController.text,
                       phone: phoneController.text,
                       location: locationController.text,
@@ -685,6 +714,7 @@ class _SuppliersPageState extends State<SuppliersPage> {
                         columns: const [
                           DataColumn(label: Text("Logo")),
                           DataColumn(label: Text("Shop")),
+                          DataColumn(label: Text("Type")),
                           DataColumn(label: Text("Owner")),
                           DataColumn(label: Text("Contact")),
                           DataColumn(label: Text("Location")),
@@ -715,6 +745,28 @@ class _SuppliersPageState extends State<SuppliersPage> {
                                   supplier.shopName,
                                   style: const TextStyle(
                                     fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                              DataCell(
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 3,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: Colors.blue.shade50,
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: Text(
+                                    supplier.shopType.isNotEmpty
+                                        ? supplier.shopType
+                                        : "—",
+                                    style: TextStyle(
+                                      color: Colors.blue.shade800,
+                                      fontWeight: FontWeight.w500,
+                                      fontSize: 12,
+                                    ),
                                   ),
                                 ),
                               ),

@@ -3,7 +3,6 @@ import 'package:pfe_dash/pages/users_page.dart';
 import 'package:pfe_dash/pages/Plantspage.dart';
 import 'package:pfe_dash/pages/Postspage.dart';
 import 'package:pfe_dash/pages/Blogspage.dart';
-import 'package:pfe_dash/pages/D3PlantsPage.dart';
 import 'package:pfe_dash/pages/ReviewsPage.dart';
 import 'package:pfe_dash/pages/DashboardPage.dart';
 import 'package:pfe_dash/pages/SuppliersPage.dart';
@@ -22,14 +21,13 @@ class _HomePageState extends State<HomePage> {
   int _selectedIndex = 0;
 
   final List<Widget> _pages = [
-    const DashboardPage(), // 0
-    const UsersPage(), // 1
-    const PlantsPage(), // 2
-    const PostsPage(), // 3
-    const BlogsPage(), // 4
-    const D3PlantsPage(), // 5
-    const ReviewsPage(), // 6
-    const SuppliersPage(), // 7
+    const DashboardPage(),  // 0
+    const UsersPage(),      // 1
+    const PlantsPage(),     // 2
+    const PostsPage(),      // 3
+    const BlogsPage(),      // 4
+    const ReviewsPage(),    // 5
+    const SuppliersPage(),  // 6
   ];
 
   @override
@@ -112,20 +110,13 @@ class _HomePageState extends State<HomePage> {
 
                 _buildMenuItem(
                   5,
-                  Image.asset('assets/images/3d.png', width: 24),
-                  '3D Plants',
-                  _isSidebarExpanded,
-                ),
-
-                _buildMenuItem(
-                  6,
                   Image.asset('assets/images/review.png', width: 24),
                   'Reviews',
                   _isSidebarExpanded,
                 ),
 
                 _buildMenuItem(
-                  7,
+                  6,
                   const Icon(Icons.storefront, color: Colors.black),
                   'Suppliers',
                   _isSidebarExpanded,
@@ -135,7 +126,7 @@ class _HomePageState extends State<HomePage> {
 
                 // FIX: Logout is NOT a page
                 _buildMenuItem(
-                  8,
+                  7,
                   Image.asset('assets/images/logout.png', width: 24),
                   'Logout',
                   _isSidebarExpanded,
@@ -174,7 +165,7 @@ class _HomePageState extends State<HomePage> {
 
       onTap: () {
         // Handle logout separately
-        if (index == 8) {
+        if (index == 7) {
           _logout();
           return;
         }
