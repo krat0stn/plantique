@@ -10,6 +10,7 @@ const ProductSchema = new Schema(
     imageUrl:      { type: String, trim: true },
     imagePublicId: { type: String, trim: true },
     description:   { type: String, default: "" },
+    quantity:      { type: Number, default: 0 },
     inStock:       { type: Boolean, default: true },
     isActive:      { type: Boolean, default: true },
   },

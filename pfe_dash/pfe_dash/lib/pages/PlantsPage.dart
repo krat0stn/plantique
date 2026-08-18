@@ -143,7 +143,7 @@ class _PlantsPageState extends State<PlantsPage> {
 
     try {
       final query = selectedType != "All" ? '?type=$selectedType' : '';
-      final data = await ApiService.get('/plant-care$query');
+      final data = await ApiService.get('/admin/plant-care$query');
       final List<dynamic> plantList = data['data'] ?? [];
 
       plants = plantList.map((p) => PlantModel.fromJson(p)).toList();

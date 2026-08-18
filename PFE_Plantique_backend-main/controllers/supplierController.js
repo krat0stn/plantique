@@ -1,6 +1,14 @@
 const Supplier = require("../models/Supplier");
 const Product  = require("../models/Product");
 const cloudinary = require("cloudinary").v2;
+const bcrypt = require("bcrypt");
+
+// Strips the password hash before a Supplier doc is sent to the client
+const toSafeSupplier = (supplier) => {
+  const obj = supplier.toObject ? supplier.toObject() : { ...supplier };
+  delete obj.password;
+  return obj;
+};
 
 const uploadLogo = (buffer) =>
   new Promise((resolve, reject) => {
@@ -83,6 +91,7 @@ exports.withStats = async (_req, res) => {
           products:      0,
           logoPublicId:  0,
           updatedAt:     0,
+          password:      0,
         },
       },
       { $sort: { shopName: 1 } },
@@ -125,7 +134,7 @@ exports.adminList = async (req, res) => {
           productCount: { $size: "$products" },
         },
       },
-      { $project: { products: 0 } },
+      { $project: { products: 0, password: 0 } },
       { $sort: { shopName: 1 } },
     ]);
 
@@ -141,7 +150,7 @@ exports.adminList = async (req, res) => {
 // POST /api/suppliers
 exports.create = async (req, res) => {
   try {
-    const { firstName, lastName, shopName, email, phone, location, bio } = req.body;
+    const { firstName, lastName, shopName, shopType, email, password, phone, location, bio } = req.body;
 
     let logoUrl, logoPublicId;
     if (req.file) {
@@ -150,11 +159,19 @@ exports.create = async (req, res) => {
       logoPublicId = result.public_id;
     }
 
+    let hashedPassword;
+    if (password) {
+      const salt = await bcrypt.genSalt(10);
+      hashedPassword = await bcrypt.hash(password, salt);
+    }
+
     const supplier = await Supplier.create({
       firstName,
       lastName,
       shopName,
+      shopType: shopType || undefined,
       email:    email    || undefined,
+      password: hashedPassword,
       phone:    phone    || undefined,
       location: location || undefined,
       bio:      bio      || undefined,
@@ -162,7 +179,7 @@ exports.create = async (req, res) => {
       logoPublicId,
     });
 
-    res.status(201).json(supplier);
+    res.status(201).json(toSafeSupplier(supplier));
   } catch (err) {
     res.status(400).json({ error: err.message });
   }
@@ -174,16 +191,23 @@ exports.update = async (req, res) => {
     const supplier = await Supplier.findById(req.params.id);
     if (!supplier) return res.status(404).json({ error: "Supplier not found" });
 
-    const { firstName, lastName, shopName, email, phone, location, bio, isActive } = req.body;
+    const { firstName, lastName, shopName, shopType, email, password, phone, location, bio, isActive } = req.body;
 
     if (firstName !== undefined) supplier.firstName = firstName;
     if (lastName  !== undefined) supplier.lastName  = lastName;
     if (shopName  !== undefined) supplier.shopName  = shopName;
+    if (shopType  !== undefined) supplier.shopType  = shopType || undefined;
     if (email     !== undefined) supplier.email     = email    || undefined;
     if (phone     !== undefined) supplier.phone     = phone    || undefined;
     if (location  !== undefined) supplier.location  = location || undefined;
     if (bio       !== undefined) supplier.bio       = bio      || undefined;
     if (isActive  !== undefined) supplier.isActive  = isActive !== "false";
+
+    // Only touch the password if a new one was actually submitted
+    if (password) {
+      const salt = await bcrypt.genSalt(10);
+      supplier.password = await bcrypt.hash(password, salt);
+    }
 
     if (req.file) {
       if (supplier.logoPublicId) {
@@ -195,7 +219,7 @@ exports.update = async (req, res) => {
     }
 
     await supplier.save();
-    res.json(supplier);
+    res.json(toSafeSupplier(supplier));
   } catch (err) {
     res.status(400).json({ error: err.message });
   }

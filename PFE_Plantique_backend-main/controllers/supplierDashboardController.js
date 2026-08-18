@@ -1,0 +1,487 @@
+// controllers/supplierDashboardController.js
+/**
+ * All handlers here require verifyToken + isSupplier middleware.
+ * The authenticated supplier's ID is ALWAYS taken from req.user.supplierId (JWT claim).
+ * Never trust supplier IDs from the request body/params for ownership checks.
+ */
+const Product  = require("../models/Product");
+const Poste    = require("../models/Poste");
+const Blog     = require("../models/Blog");
+const Purchase = require("../models/Purchase");
+const Supplier = require("../models/Supplier");
+const User     = require("../models/User");
+const cloudinary = require("cloudinary").v2;
+
+const {
+  createNotification,
+  createNotificationForMany,
+} = require("./notificationController");
+
+// ─────────────────────────────────────────────────────────────────────────────
+// HELPERS
+// ─────────────────────────────────────────────────────────────────────────────
+
+const uploadToCloudinary = (buffer, folder) =>
+  new Promise((resolve, reject) => {
+    const stream = cloudinary.uploader.upload_stream(
+      { folder, resource_type: "image" },
+      (err, result) => (err ? reject(err) : resolve(result))
+    );
+    stream.end(buffer);
+  });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PRODUCTS
+// ─────────────────────────────────────────────────────────────────────────────
+
+// GET /api/supplier-dashboard/products
+exports.listProducts = async (req, res) => {
+  try {
+    const supplierId = req.user.supplierId;
+    const products = await Product.find({ supplier: supplierId, isActive: true })
+      .sort({ createdAt: -1 });
+    res.json({ data: products });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+// POST /api/supplier-dashboard/products
+exports.createProduct = async (req, res) => {
+  try {
+    const supplierId = req.user.supplierId;
+    const { name, category, price, quantity, description, inStock } = req.body;
+
+    if (!name || !category || price === undefined) {
+      return res.status(400).json({ error: "name, category and price are required" });
+    }
+
+    let imageUrl, imagePublicId;
+    if (req.file) {
+      const result = await uploadToCloudinary(req.file.buffer, "store/products");
+      imageUrl      = result.secure_url;
+      imagePublicId = result.public_id;
+    }
+
+    const product = await Product.create({
+      name,
+      supplier: supplierId,          // always from JWT
+      price: Number(price),
+      category,
+      quantity: Number(quantity) || 0,
+      description: description || "",
+      inStock: inStock !== "false",
+      imageUrl,
+      imagePublicId,
+    });
+
+    res.status(201).json({ data: product });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+};
+
+// PUT /api/supplier-dashboard/products/:id
+exports.updateProduct = async (req, res) => {
+  try {
+    const supplierId = req.user.supplierId;
+    const product = await Product.findById(req.params.id);
+
+    if (!product) return res.status(404).json({ error: "Product not found" });
+
+    // Enforce ownership
+    if (product.supplier.toString() !== supplierId.toString()) {
+      return res.status(403).json({ error: "Not your product" });
+    }
+
+    const { name, category, price, quantity, description, inStock } = req.body;
+    if (name     !== undefined) product.name     = name;
+    if (category !== undefined) product.category = category;
+    if (price    !== undefined) product.price    = Number(price);
+    if (quantity !== undefined) product.quantity = Number(quantity);
+    if (description !== undefined) product.description = description;
+    if (inStock  !== undefined) product.inStock  = inStock !== "false";
+
+    if (req.file) {
+      if (product.imagePublicId) {
+        await cloudinary.uploader.destroy(product.imagePublicId).catch(() => {});
+      }
+      const result = await uploadToCloudinary(req.file.buffer, "store/products");
+      product.imageUrl      = result.secure_url;
+      product.imagePublicId = result.public_id;
+    }
+
+    await product.save();
+    res.json({ data: product });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+};
+
+// DELETE /api/supplier-dashboard/products/:id
+exports.deleteProduct = async (req, res) => {
+  try {
+    const supplierId = req.user.supplierId;
+    const product = await Product.findById(req.params.id);
+
+    if (!product) return res.status(404).json({ error: "Product not found" });
+
+    if (product.supplier.toString() !== supplierId.toString()) {
+      return res.status(403).json({ error: "Not your product" });
+    }
+
+    if (product.imagePublicId) {
+      await cloudinary.uploader.destroy(product.imagePublicId).catch(() => {});
+    }
+    await product.deleteOne();
+    res.json({ message: "Product deleted" });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// POSTS
+// ─────────────────────────────────────────────────────────────────────────────
+
+// GET /api/supplier-dashboard/posts
+exports.listPosts = async (req, res) => {
+  try {
+    const supplierId = req.user.supplierId;
+    const posts = await Poste.find({ supplierId }).sort({ createdAt: -1 });
+    res.json({ data: posts });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+// POST /api/supplier-dashboard/posts
+exports.createPost = async (req, res) => {
+  try {
+    const supplierId = req.user.supplierId;
+    const { content } = req.body;
+
+    if (!content || !content.trim()) {
+      return res.status(400).json({ error: "content is required" });
+    }
+
+    let picturePath = null;
+    if (req.file) picturePath = req.file.path || req.file.secure_url || null;
+
+    const post = await Poste.create({
+      supplierId,
+      content: content.trim(),
+      picture: picturePath,
+      status: "pending",             // always pending for supplier content
+    });
+
+    // Notify all admins of new supplier post needing review
+    try {
+      const admins = await User.find({ role: "Admin" }).select("_id");
+      const adminIds = admins.map((a) => a._id);
+      if (adminIds.length > 0) {
+        await createNotificationForMany({
+          userIds: adminIds,
+          type: "post",
+          title: "New supplier post to review",
+          message: "A supplier has created a new post that needs review.",
+          postId: post._id,
+        });
+      }
+    } catch (notifyErr) {
+      console.error("Supplier post admin notification error:", notifyErr.message);
+    }
+
+    res.status(201).json({ data: post });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+};
+
+// PUT /api/supplier-dashboard/posts/:id
+exports.updatePost = async (req, res) => {
+  try {
+    const supplierId = req.user.supplierId;
+    const post = await Poste.findById(req.params.id);
+
+    if (!post) return res.status(404).json({ error: "Post not found" });
+
+    if (!post.supplierId || post.supplierId.toString() !== supplierId.toString()) {
+      return res.status(403).json({ error: "Not your post" });
+    }
+
+    const { content } = req.body;
+    if (content !== undefined) {
+      if (!content.trim()) return res.status(400).json({ error: "content cannot be empty" });
+      post.content = content.trim();
+    }
+
+    if (req.file) {
+      post.picture = req.file.path || req.file.secure_url || null;
+    }
+
+    // Editing a post resets status to pending for admin re-review
+    post.status = "pending";
+    await post.save();
+
+    // Notify admins of edited supplier post
+    try {
+      const admins = await User.find({ role: "Admin" }).select("_id");
+      const adminIds = admins.map((a) => a._id);
+      if (adminIds.length > 0) {
+        await createNotificationForMany({
+          userIds: adminIds,
+          type: "post",
+          title: "Supplier post updated – needs review",
+          message: "A supplier edited a post; it has been reset to pending.",
+          postId: post._id,
+        });
+      }
+    } catch (notifyErr) {
+      console.error("Supplier post update admin notification error:", notifyErr.message);
+    }
+
+    res.json({ data: post });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+};
+
+// DELETE /api/supplier-dashboard/posts/:id
+exports.deletePost = async (req, res) => {
+  try {
+    const supplierId = req.user.supplierId;
+    const post = await Poste.findById(req.params.id);
+
+    if (!post) return res.status(404).json({ error: "Post not found" });
+
+    if (!post.supplierId || post.supplierId.toString() !== supplierId.toString()) {
+      return res.status(403).json({ error: "Not your post" });
+    }
+
+    await post.deleteOne();
+    res.json({ message: "Post deleted" });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BLOGS
+// ─────────────────────────────────────────────────────────────────────────────
+
+// GET /api/supplier-dashboard/blogs
+exports.listBlogs = async (req, res) => {
+  try {
+    const supplierId = req.user.supplierId;
+    const blogs = await Blog.find({ supplierId }).sort({ createdAt: -1 });
+    res.json({ data: blogs });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+// POST /api/supplier-dashboard/blogs
+exports.createBlog = async (req, res) => {
+  try {
+    const supplierId = req.user.supplierId;
+    const { title, content, excerpt } = req.body;
+
+    if (!title || !content) {
+      return res.status(400).json({ error: "title and content are required" });
+    }
+
+    let imageUrl, imagePublicId;
+    if (req.file) {
+      const result = await uploadToCloudinary(req.file.buffer, "store/blogs");
+      imageUrl      = result.secure_url;
+      imagePublicId = result.public_id;
+    }
+
+    const blog = await Blog.create({
+      supplierId,
+      title: title.trim(),
+      content: content.trim(),
+      excerpt: excerpt?.trim(),
+      imageUrl,
+      imagePublicId,
+      status: "pending",             // always pending for supplier content
+    });
+
+    // Notify all admins
+    try {
+      const admins = await User.find({ role: "Admin" }).select("_id");
+      const adminIds = admins.map((a) => a._id);
+      if (adminIds.length > 0) {
+        await createNotificationForMany({
+          userIds: adminIds,
+          type: "blog",
+          title: "New supplier blog to review",
+          message: `Supplier created blog: ${blog.title}`,
+          blogId: blog._id,
+        });
+      }
+    } catch (notifyErr) {
+      console.error("Supplier blog admin notification error:", notifyErr.message);
+    }
+
+    res.status(201).json({ data: blog });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+};
+
+// PUT /api/supplier-dashboard/blogs/:id
+exports.updateBlog = async (req, res) => {
+  try {
+    const supplierId = req.user.supplierId;
+    const blog = await Blog.findById(req.params.id);
+
+    if (!blog) return res.status(404).json({ error: "Blog not found" });
+
+    if (!blog.supplierId || blog.supplierId.toString() !== supplierId.toString()) {
+      return res.status(403).json({ error: "Not your blog" });
+    }
+
+    const { title, content, excerpt } = req.body;
+    if (title   !== undefined) blog.title   = title.trim();
+    if (content !== undefined) blog.content = content.trim();
+    if (excerpt !== undefined) blog.excerpt = excerpt.trim();
+
+    if (req.file) {
+      if (blog.imagePublicId) {
+        await cloudinary.uploader.destroy(blog.imagePublicId).catch(() => {});
+      }
+      const result = await uploadToCloudinary(req.file.buffer, "store/blogs");
+      blog.imageUrl      = result.secure_url;
+      blog.imagePublicId = result.public_id;
+    }
+
+    // Editing resets to pending for admin re-review
+    blog.status = "pending";
+    await blog.save();
+
+    // Notify admins
+    try {
+      const admins = await User.find({ role: "Admin" }).select("_id");
+      const adminIds = admins.map((a) => a._id);
+      if (adminIds.length > 0) {
+        await createNotificationForMany({
+          userIds: adminIds,
+          type: "blog",
+          title: "Supplier blog updated – needs review",
+          message: `Supplier edited blog: ${blog.title}`,
+          blogId: blog._id,
+        });
+      }
+    } catch (notifyErr) {
+      console.error("Supplier blog update admin notification error:", notifyErr.message);
+    }
+
+    res.json({ data: blog });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+};
+
+// DELETE /api/supplier-dashboard/blogs/:id
+exports.deleteBlog = async (req, res) => {
+  try {
+    const supplierId = req.user.supplierId;
+    const blog = await Blog.findById(req.params.id);
+
+    if (!blog) return res.status(404).json({ error: "Blog not found" });
+
+    if (!blog.supplierId || blog.supplierId.toString() !== supplierId.toString()) {
+      return res.status(403).json({ error: "Not your blog" });
+    }
+
+    if (blog.imagePublicId) {
+      await cloudinary.uploader.destroy(blog.imagePublicId).catch(() => {});
+    }
+    await blog.deleteOne();
+    res.json({ message: "Blog deleted" });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PURCHASES
+// ─────────────────────────────────────────────────────────────────────────────
+
+// GET /api/supplier-dashboard/purchases
+exports.listPurchases = async (req, res) => {
+  try {
+    const supplierId = req.user.supplierId;
+    const purchases = await Purchase.find({ supplierId })
+      .populate("productId", "name category")
+      .populate("userId", "username email")
+      .sort({ date: -1 });
+    res.json({ data: purchases });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+/**
+ * POST /api/supplier-dashboard/purchases/record
+ * Called internally (or by the mobile app booking flow) to record a purchase.
+ * Accepts: supplierId (resolved from productId), productId, qte, userId, userInfo, price
+ * This endpoint can be called by the User (via verifyToken) or internally.
+ */
+exports.recordPurchase = async (req, res) => {
+  try {
+    const { productId, qte, userInfo, price } = req.body;
+
+    if (!productId || !qte) {
+      return res.status(400).json({ error: "productId and qte are required" });
+    }
+
+    // Resolve supplier from product
+    const product = await Product.findById(productId);
+    if (!product) return res.status(404).json({ error: "Product not found" });
+
+    const supplierId = product.supplier;
+    const userId = req.user?.id || req.user?._id || null;
+
+    // Fetch user info if not provided
+    let resolvedUserInfo = userInfo;
+    if (!resolvedUserInfo && userId) {
+      const user = await User.findById(userId).select("username email");
+      if (user) resolvedUserInfo = `${user.username} (${user.email})`;
+    }
+
+    const purchase = await Purchase.create({
+      supplierId,
+      productId,
+      article: product.name,
+      qte: Number(qte),
+      userInfo: resolvedUserInfo || "Unknown",
+      userId,
+      price: price !== undefined ? Number(price) : product.price * Number(qte),
+      date: new Date(),
+    });
+
+    // Decrement quantity in product
+    await Product.findByIdAndUpdate(productId, {
+      $inc: { quantity: -Number(qte) },
+    });
+
+    res.status(201).json({ data: purchase });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+};
+
+// GET /api/supplier-dashboard/me  — returns current supplier profile
+exports.getProfile = async (req, res) => {
+  try {
+    const supplierId = req.user.supplierId;
+    const supplier = await Supplier.findById(supplierId);
+    if (!supplier) return res.status(404).json({ error: "Supplier not found" });
+    res.json({ data: supplier });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};

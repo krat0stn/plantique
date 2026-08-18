@@ -30,6 +30,7 @@ const arRoutes = require("./routes/arRoutes");
 const adminPlantCareRoutes = require("./routes/adminPlantCareRoutes");
 const storeRoutes    = require("./routes/productRoutes");
 const supplierRoutes = require("./routes/supplierRoutes");
+const supplierDashboardRoutes = require("./routes/supplierDashboardRoutes");
 
 const app = express();
 const server = http.createServer(app);
@@ -92,6 +93,16 @@ app.use("/api/admin/dashboard", dashboardRoutes);
 
 app.use("/api/store",     storeRoutes);
 app.use("/api/suppliers", supplierRoutes);
+app.use("/api/supplier-dashboard", supplierDashboardRoutes);
+
+// Purchase record — called by user-side booking flow (requires any valid token)
+(function () {
+  const purchaseRouter = require("express").Router();
+  const { verifyToken } = require("./middlewares/authMiddleware");
+  const { recordPurchase } = require("./controllers/supplierDashboardController");
+  purchaseRouter.post("/record", verifyToken, recordPurchase);
+  app.use("/api/purchases", purchaseRouter);
+})();
 
 app.use((_req, res) => {
   res.status(404).json({ errormessage: "Route introuvable" });

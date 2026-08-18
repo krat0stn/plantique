@@ -1,4 +1,5 @@
 const User = require("../models/User");
+const Supplier = require("../models/Supplier");
 const bcrypt = require("bcrypt");
 const { Resend } = require("resend");
 const { generateResetEmailTemplate } = require("../utils/emailTemplates");
@@ -439,6 +440,85 @@ exports.googleLogin = async (req, res) => {
     return res.status(400).json({
       code: "GOOGLE_LOGIN_FAILED",
       message: "Google sign-in failed.",
+    });
+  }
+};
+
+// -----------------------
+// SUPPLIER SIGN IN
+// -----------------------
+exports.supplierSignin = async (req, res) => {
+  try {
+    const { email, password } = req.body || {};
+
+    if (!email || !password) {
+      return res.status(400).json({
+        code: "MISSING_FIELDS",
+        errormessage: "Email and password are required.",
+      });
+    }
+
+    if (!validator.isEmail(email)) {
+      return res.status(400).json({
+        code: "INVALID_EMAIL_FORMAT",
+        errormessage: "Invalid email address.",
+      });
+    }
+
+    // Must select password explicitly (select: false on schema)
+    const supplier = await Supplier.findOne({ email }).select("+password");
+    if (!supplier) {
+      return res.status(404).json({
+        code: "EMAIL_NOT_FOUND",
+        errormessage: "No supplier account found with this email.",
+      });
+    }
+
+    if (!supplier.isActive) {
+      return res.status(403).json({
+        code: "ACCOUNT_DISABLED",
+        errormessage: "This supplier account has been suspended.",
+      });
+    }
+
+    if (!supplier.password) {
+      return res.status(401).json({
+        code: "PASSWORD_NOT_SET",
+        errormessage: "No password is set for this account.",
+      });
+    }
+
+    const ok = await bcrypt.compare(password, supplier.password);
+    if (!ok) {
+      return res.status(401).json({
+        code: "INVALID_PASSWORD",
+        errormessage: "Incorrect password.",
+      });
+    }
+
+    const token = jwt.sign(
+      {
+        id: supplier._id,
+        supplierId: supplier._id,
+        role: "Supplier",
+        shopName: supplier.shopName,
+      },
+      process.env.JWT_SECRET,
+      { expiresIn: "7d" }
+    );
+
+    const safeSupplier = supplier.toObject();
+    delete safeSupplier.password;
+
+    return res.status(200).json({
+      message: "Supplier signed in successfully.",
+      token,
+      user: { ...safeSupplier, role: "Supplier" },
+    });
+  } catch (err) {
+    return res.status(500).json({
+      code: "SERVER_ERROR",
+      errormessage: "Server error: " + err.message,
     });
   }
 };

@@ -28,7 +28,13 @@ exports.verifyToken = (req, res, next) => {
         .json({ errormessage: "Token invalide: claims manquants (id/role)" });
     }
 
-    req.user = { _id: userId, id: userId, role };
+    req.user = {
+      _id: userId,
+      id: userId,
+      role,
+      // Supplier-specific claim (set when role === 'Supplier')
+      supplierId: decoded.supplierId || null,
+    };
     res.locals.userId = userId;
     res.locals.userRole = role;
 
@@ -57,4 +63,15 @@ exports.isAdmin = (req, res, next) => {
   }
   next();
 };
+
+exports.isSupplier = (req, res, next) => {
+  if (req.user.role !== "Supplier") {
+    return res.status(403).json({ errormessage: "Supplier access required" });
+  }
+  if (!req.user.supplierId) {
+    return res.status(403).json({ errormessage: "Supplier identity missing from token" });
+  }
+  next();
+};
+
 exports.isUser = exports.allowRoles("User");

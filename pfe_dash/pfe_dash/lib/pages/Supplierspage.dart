@@ -1,7 +1,25 @@
+import 'dart:math';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:pfe_dash/services/api_service.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:http/http.dart' as http;
+
+/// Shop type choices shown in the dropdown. "Autre" reveals a free-text field.
+const List<String> kShopTypeOptions = [
+  "Fleuriste",
+  "Pépinière",
+  "Fournisseur",
+  "Autre",
+];
+
+/// Generates a random, reasonably strong temporary password.
+String generateRandomPassword({int length = 12}) {
+  const chars =
+      'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#\$%&*';
+  final rand = Random.secure();
+  return List.generate(length, (_) => chars[rand.nextInt(chars.length)]).join();
+}
 
 class SupplierModel {
   final String id;
@@ -149,6 +167,7 @@ class _SuppliersPageState extends State<SuppliersPage> {
     required String shopName,
     required String shopType,
     required String email,
+    required String password,
     required String phone,
     required String location,
     required String bio,
@@ -160,6 +179,7 @@ class _SuppliersPageState extends State<SuppliersPage> {
         'shopName': shopName,
         'shopType': shopType,
         'email': email,
+        'password': password,
         'phone': phone,
         'location': location,
         'bio': bio,
@@ -283,12 +303,17 @@ class _SuppliersPageState extends State<SuppliersPage> {
     final firstNameController = TextEditingController();
     final lastNameController = TextEditingController();
     final shopNameController = TextEditingController();
-    final shopTypeController = TextEditingController();
+    final customShopTypeController = TextEditingController();
     final emailController = TextEditingController();
+    final passwordController = TextEditingController(
+      text: generateRandomPassword(),
+    );
     final phoneController = TextEditingController();
     final locationController = TextEditingController();
     final bioController = TextEditingController();
     selectedLogo = null;
+    String? selectedShopType;
+    bool obscurePassword = false;
 
     showDialog(
       context: context,
@@ -324,14 +349,31 @@ class _SuppliersPageState extends State<SuppliersPage> {
                         ),
                       ),
                       const SizedBox(height: 12),
-                      TextField(
-                        controller: shopTypeController,
+                      DropdownButtonFormField<String>(
+                        value: selectedShopType,
                         decoration: const InputDecoration(
                           labelText: "Shop type",
-                          hintText: "e.g. Retail, Wholesale, Dropshipping",
                           border: OutlineInputBorder(),
                         ),
+                        items: kShopTypeOptions
+                            .map(
+                              (t) => DropdownMenuItem(value: t, child: Text(t)),
+                            )
+                            .toList(),
+                        onChanged: (value) {
+                          setDialogState(() => selectedShopType = value);
+                        },
                       ),
+                      if (selectedShopType == "Autre") ...[
+                        const SizedBox(height: 12),
+                        TextField(
+                          controller: customShopTypeController,
+                          decoration: const InputDecoration(
+                            labelText: "Specify shop type *",
+                            border: OutlineInputBorder(),
+                          ),
+                        ),
+                      ],
                       const SizedBox(height: 12),
                       Row(
                         children: [
@@ -362,6 +404,55 @@ class _SuppliersPageState extends State<SuppliersPage> {
                         decoration: const InputDecoration(
                           labelText: "Email",
                           border: OutlineInputBorder(),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: passwordController,
+                        obscureText: obscurePassword,
+                        decoration: InputDecoration(
+                          labelText: "Password (auto-generated)",
+                          border: const OutlineInputBorder(),
+                          suffixIcon: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              IconButton(
+                                tooltip: obscurePassword ? "Show" : "Hide",
+                                icon: Icon(
+                                  obscurePassword
+                                      ? Icons.visibility
+                                      : Icons.visibility_off,
+                                ),
+                                onPressed: () => setDialogState(
+                                  () => obscurePassword = !obscurePassword,
+                                ),
+                              ),
+                              IconButton(
+                                tooltip: "Copy",
+                                icon: const Icon(Icons.copy),
+                                onPressed: () {
+                                  Clipboard.setData(
+                                    ClipboardData(
+                                      text: passwordController.text,
+                                    ),
+                                  );
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      content: Text("Password copied"),
+                                    ),
+                                  );
+                                },
+                              ),
+                              IconButton(
+                                tooltip: "Regenerate",
+                                icon: const Icon(Icons.refresh),
+                                onPressed: () => setDialogState(
+                                  () => passwordController.text =
+                                      generateRandomPassword(),
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                       const SizedBox(height: 12),
@@ -412,13 +503,26 @@ class _SuppliersPageState extends State<SuppliersPage> {
                       );
                       return;
                     }
+                    if (selectedShopType == "Autre" &&
+                        customShopTypeController.text.trim().isEmpty) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text("Please specify the shop type"),
+                        ),
+                      );
+                      return;
+                    }
+                    final finalShopType = selectedShopType == "Autre"
+                        ? customShopTypeController.text.trim()
+                        : (selectedShopType ?? '');
                     Navigator.pop(context);
                     await addSupplier(
                       firstName: firstNameController.text,
                       lastName: lastNameController.text,
                       shopName: shopNameController.text,
-                      shopType: shopTypeController.text,
+                      shopType: finalShopType,
                       email: emailController.text,
+                      password: passwordController.text,
                       phone: phoneController.text,
                       location: locationController.text,
                       bio: bioController.text,

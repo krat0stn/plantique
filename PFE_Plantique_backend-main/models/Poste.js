@@ -3,7 +3,10 @@ const { Schema } = mongoose;
 
 const posteSchema = new Schema(
   {
-    userId: { type: Schema.Types.ObjectId, ref: "User", required: true },
+    // User who authored (regular user posts). Optional when supplierId is set.
+    userId: { type: Schema.Types.ObjectId, ref: "User", required: false },
+    // Supplier who authored (supplier-created posts)
+    supplierId: { type: Schema.Types.ObjectId, ref: "Supplier", required: false },
     content: { type: String, required: true, trim: true },
     picture: { type: String },
     status: {
@@ -11,7 +14,7 @@ const posteSchema = new Schema(
       enum: ["pending", "approved", "declined"],
       default: "pending",
     },
-    // Compteurs
+    // Counters
     likesCount: { type: Number, default: 0 },
     savedCount: { type: Number, default: 0 },
     commentsCount: { type: Number, default: 0 },
@@ -20,6 +23,7 @@ const posteSchema = new Schema(
 );
 
 posteSchema.index({ userId: 1, createdAt: -1 });
+posteSchema.index({ supplierId: 1, createdAt: -1 });
 posteSchema.index({ status: 1, createdAt: -1 });
 
 module.exports = mongoose.model("Poste", posteSchema);

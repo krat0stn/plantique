@@ -26,6 +26,7 @@ const passwordLimiter = rateLimit({
 });
 
 router.post("/signin", authLimiter,AuthController.signin);
+router.post("/supplier-signin", authLimiter, AuthController.supplierSignin);
 router.post("/signup", authLimiter, upload.single("picture"), AuthController.signup);
 router.post("/forgot-password", passwordLimiter, AuthController.forgotPassword);
 router.post("/reset-password", passwordLimiter, AuthController.resetPassword);
