@@ -26,87 +26,60 @@ class LoginPage extends StatefulWidget {
   State<LoginPage> createState() => _LoginPageState();
 }
 
-class _LoginPageState extends State<LoginPage> with SingleTickerProviderStateMixin {
-  late TabController _tabController;
-  final _adminEmailCtrl    = TextEditingController();
-  final _adminPasswordCtrl = TextEditingController();
-  final _supplierEmailCtrl    = TextEditingController();
-  final _supplierPasswordCtrl = TextEditingController();
+class _LoginPageState extends State<LoginPage> {
+  final _emailController = TextEditingController();
+  final _passwordController = TextEditingController();
 
-  bool _adminLoading    = false;
-  bool _supplierLoading = false;
-  String? _adminError;
-  String? _supplierError;
-
-  @override
-  void initState() {
-    super.initState();
-    _tabController = TabController(length: 2, vsync: this);
-  }
+  bool _loading = false;
+  String? _error;
 
   @override
   void dispose() {
-    _tabController.dispose();
-    _adminEmailCtrl.dispose();
-    _adminPasswordCtrl.dispose();
-    _supplierEmailCtrl.dispose();
-    _supplierPasswordCtrl.dispose();
+    _emailController.dispose();
+    _passwordController.dispose();
     super.dispose();
   }
 
-  Future<void> _adminLogin() async {
-    setState(() { _adminLoading = true; _adminError = null; });
+  // Single sign-in call: the backend checks the Users collection first,
+  // then the Suppliers collection, and tells us which one matched via
+  // `user['role']`. We route to the matching dashboard - no manual
+  // "login as admin / login as supplier" choice needed.
+  Future<void> _login() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
     try {
       final response = await ApiService.post('/auth/signin', {
-        'email': _adminEmailCtrl.text,
-        'password': _adminPasswordCtrl.text,
+        'email': _emailController.text,
+        'password': _passwordController.text,
       });
+
       final token = response['token'];
       if (token != null) ApiService.setToken(token);
 
       final user = response['user'];
-      if (user != null) {
-        final role = user['role']?.toString() ?? 'User';
-        ApiService.setIsAdmin(role == 'Admin');
-      }
+      final role = user != null ? (user['role']?.toString() ?? 'User') : 'User';
+      ApiService.setRole(role);
+      ApiService.setIsAdmin(role == 'Admin');
 
-      if (mounted) {
+      if (!mounted) return;
+
+      if (role == 'Supplier') {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const SupplierHomePage()),
+        );
+      } else {
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(builder: (_) => const HomePage()),
         );
       }
     } catch (e) {
-      setState(() => _adminError = 'Login failed: ${e.toString()}');
+      setState(() => _error = 'Login failed: ${e.toString()}');
     } finally {
-      setState(() => _adminLoading = false);
-    }
-  }
-
-  Future<void> _supplierLogin() async {
-    setState(() { _supplierLoading = true; _supplierError = null; });
-    try {
-      final response = await ApiService.post('/auth/supplier-signin', {
-        'email': _supplierEmailCtrl.text,
-        'password': _supplierPasswordCtrl.text,
-      });
-      final token = response['token'];
-      if (token != null) {
-        ApiService.setToken(token);
-        ApiService.setIsAdmin(false);
-        ApiService.setRole('Supplier');
-      }
-
-      if (mounted) {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (_) => const SupplierHomePage()),
-        );
-      }
-    } catch (e) {
-      setState(() => _supplierError = 'Login failed: ${e.toString()}');
-    } finally {
-      setState(() => _supplierLoading = false);
+      setState(() => _loading = false);
     }
   }
 
@@ -115,61 +88,30 @@ class _LoginPageState extends State<LoginPage> with SingleTickerProviderStateMix
     return Scaffold(
       body: Center(
         child: Container(
-          width: 620,
-          height: 500,
+          width: 600,
+          height: 450,
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(16),
             boxShadow: const [
-              BoxShadow(color: Colors.black26, blurRadius: 20, offset: Offset(0, 10)),
+              BoxShadow(
+                color: Colors.black26,
+                blurRadius: 20,
+                offset: Offset(0, 10),
+              ),
             ],
           ),
           child: Row(
             children: [
               const Expanded(child: _PictureSide()),
               Expanded(
-                child: Column(
-                  children: [
-                    // Tabs
-                    Container(
-                      color: const Color.fromARGB(186, 234, 143, 143),
-                      child: TabBar(
-                        controller: _tabController,
-                        labelColor: Colors.white,
-                        unselectedLabelColor: Colors.black54,
-                        indicatorColor: Colors.white,
-                        tabs: const [
-                          Tab(text: 'Admin Login'),
-                          Tab(text: 'Supplier Login'),
-                        ],
-                      ),
-                    ),
-                    Expanded(
-                      child: TabBarView(
-                        controller: _tabController,
-                        children: [
-                          // Admin tab
-                          _LoginFormSide(
-                            emailController: _adminEmailCtrl,
-                            passwordController: _adminPasswordCtrl,
-                            onLogin: _adminLogin,
-                            loading: _adminLoading,
-                            error: _adminError,
-                            buttonLabel: 'Sign In as Admin',
-                          ),
-                          // Supplier tab
-                          _LoginFormSide(
-                            emailController: _supplierEmailCtrl,
-                            passwordController: _supplierPasswordCtrl,
-                            onLogin: _supplierLogin,
-                            loading: _supplierLoading,
-                            error: _supplierError,
-                            buttonLabel: 'Sign In as Supplier',
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
+                child: _LoginFormSide(
+                  emailController: _emailController,
+                  passwordController: _passwordController,
+                  onLogin: _login,
+                  loading: _loading,
+                  error: _error,
+                  buttonLabel: 'Sign In',
                 ),
               ),
             ],
@@ -270,10 +212,17 @@ class _LoginFormSide extends StatelessWidget {
             ),
             child: loading
                 ? const SizedBox(
-                    height: 20, width: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                    height: 20,
+                    width: 20,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white,
+                    ),
                   )
-                : Text(buttonLabel, style: const TextStyle(color: Colors.white)),
+                : Text(
+                    buttonLabel,
+                    style: const TextStyle(color: Colors.white),
+                  ),
           ),
         ],
       ),

@@ -50,8 +50,50 @@ exports.signin = async (req, res) => {
       });
     }
 
+    // Look up the account across both collections: Users (Admin/User) first,
+    // then Suppliers. Whichever one matches decides how the person is signed
+    // in and which dashboard they land on - no manual "login as" switch needed.
     const user = await User.findOne({ email });
-    if (!user) {
+
+    if (user) {
+      if (isAccountDisabled(user)) {
+        return res.status(403).json({
+          code: "ACCOUNT_DISABLED",
+          errormessage: "Account is disabled.",
+        });
+      }
+
+      // If user.password is empty (e.g. created via Google), block password login
+      if (!user.password) {
+        return res.status(401).json({
+          code: "PASSWORD_LOGIN_NOT_AVAILABLE",
+          errormessage: "Password login is not available for this account.",
+        });
+      }
+
+      const ok = await bcrypt.compare(password, user.password || "");
+      if (!ok) {
+        return res.status(401).json({
+          code: "INVALID_PASSWORD",
+          errormessage: "Incorrect password.",
+          errors: { password: "Incorrect password." },
+        });
+      }
+
+      const token = signJwt(user);
+      const { password: _p, resetCode: _r, resetCodeExpires: _e, ...safeUser } = user.toObject();
+
+      return res.status(200).json({
+        message: "Signed in successfully.",
+        token,
+        user: safeUser,
+      });
+    }
+
+    // Not a User account - check the Suppliers collection before failing.
+    const supplier = await Supplier.findOne({ email }).select("+password");
+
+    if (!supplier) {
       return res.status(404).json({
         code: "EMAIL_NOT_FOUND",
         errormessage: "This email does not exist.",
@@ -59,23 +101,22 @@ exports.signin = async (req, res) => {
       });
     }
 
-    if (isAccountDisabled(user)) {
+    if (!supplier.isActive) {
       return res.status(403).json({
         code: "ACCOUNT_DISABLED",
-        errormessage: "Account is disabled.",
+        errormessage: "This supplier account has been suspended.",
       });
     }
 
-    // If user.password is empty (e.g. created via Google), block password login
-    if (!user.password) {
+    if (!supplier.password) {
       return res.status(401).json({
-        code: "PASSWORD_LOGIN_NOT_AVAILABLE",
-        errormessage: "Password login is not available for this account.",
+        code: "PASSWORD_NOT_SET",
+        errormessage: "No password is set for this account.",
       });
     }
 
-    const ok = await bcrypt.compare(password, user.password || "");
-    if (!ok) {
+    const supplierOk = await bcrypt.compare(password, supplier.password);
+    if (!supplierOk) {
       return res.status(401).json({
         code: "INVALID_PASSWORD",
         errormessage: "Incorrect password.",
@@ -83,13 +124,24 @@ exports.signin = async (req, res) => {
       });
     }
 
-    const token = signJwt(user);
-    const { password: _p, resetCode: _r, resetCodeExpires: _e, ...safeUser } = user.toObject();
+    const supplierToken = jwt.sign(
+      {
+        id: supplier._id,
+        supplierId: supplier._id,
+        role: "Supplier",
+        shopName: supplier.shopName,
+      },
+      process.env.JWT_SECRET,
+      { expiresIn: "7d" }
+    );
+
+    const safeSupplier = supplier.toObject();
+    delete safeSupplier.password;
 
     return res.status(200).json({
-      message: "Signed in successfully.",
-      token,
-      user: safeUser,
+      message: "Supplier signed in successfully.",
+      token: supplierToken,
+      user: { ...safeSupplier, role: "Supplier" },
     });
   } catch (err) {
     return res.status(500).json({
