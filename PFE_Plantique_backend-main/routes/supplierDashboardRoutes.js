@@ -16,6 +16,7 @@ const {
   createProduct,
   updateProduct,
   deleteProduct,
+  importProducts,
   // Posts
   listPosts,
   createPost,
@@ -29,6 +30,7 @@ const {
   // Purchases
   listPurchases,
   recordPurchase,
+  getReceipt,
   // Stats
   getStats,
   // Profile
@@ -43,6 +45,7 @@ router.get("/me", getProfile);
 
 // Products
 router.get("/products",        listProducts);
+router.post("/products/import", upload.single("file"), importProducts);
 router.post("/products",       upload.single("image"), createProduct);
 router.put("/products/:id",    upload.single("image"), updateProduct);
 router.delete("/products/:id", deleteProduct);
@@ -61,6 +64,7 @@ router.delete("/blogs/:id", deleteBlog);
 
 // Purchases (read-only for suppliers + record endpoint for the booking flow)
 router.get("/purchases", listPurchases);
+router.get("/purchases/:id/receipt", getReceipt);
 // Called by the existing booking/purchase flow (verifyToken already included above,
 // but we also allow this via the global verifyToken without isSupplier restriction
 // so that user-side booking code can call it. The route below is a separate path.

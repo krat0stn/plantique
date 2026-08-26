@@ -92,7 +92,10 @@ class ApiService {
       return data;
     } else {
       throw Exception(
-        data['errormessage'] ?? data['error'] ?? data['message'] ?? 'Request failed',
+        data['errormessage'] ??
+            data['error'] ??
+            data['message'] ??
+            'Request failed',
       );
     }
   }
@@ -138,7 +141,10 @@ class ApiService {
       return data;
     } else {
       throw Exception(
-        data['errormessage'] ?? data['error'] ?? data['message'] ?? 'Request failed',
+        data['errormessage'] ??
+            data['error'] ??
+            data['message'] ??
+            'Request failed',
       );
     }
   }

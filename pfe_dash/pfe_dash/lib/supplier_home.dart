@@ -20,11 +20,11 @@ class _SupplierHomePageState extends State<SupplierHomePage> {
   int _selectedIndex = 0;
 
   final List<Widget> _pages = [
-    const SupplierProductsPage(), // 0
-    const SupplierPostsPage(), // 1
-    const SupplierBlogsPage(), // 2
-    const SupplierPurchasesPage(), // 3
-    const SupplierStatsPage(), // 4
+    const SupplierStatsPage(), // 0 - Dashboard
+    const SupplierProductsPage(), // 1
+    const SupplierPostsPage(), // 2
+    const SupplierBlogsPage(), // 3
+    const SupplierPurchasesPage(), // 4
   ];
 
   @override
@@ -76,36 +76,36 @@ class _SupplierHomePageState extends State<SupplierHomePage> {
 
                 _buildMenuItem(
                   0,
+                  const Icon(Icons.dashboard_outlined, color: Colors.black),
+                  'Dashboard',
+                  _isSidebarExpanded,
+                ),
+
+                _buildMenuItem(
+                  1,
                   const Icon(Icons.inventory_2, color: Colors.black),
                   'Products',
                   _isSidebarExpanded,
                 ),
 
                 _buildMenuItem(
-                  1,
+                  2,
                   const Icon(Icons.article_outlined, color: Colors.black),
                   'Posts',
                   _isSidebarExpanded,
                 ),
 
                 _buildMenuItem(
-                  2,
+                  3,
                   const Icon(Icons.book_outlined, color: Colors.black),
                   'Blogs',
                   _isSidebarExpanded,
                 ),
 
                 _buildMenuItem(
-                  3,
+                  4,
                   const Icon(Icons.shopping_cart_outlined, color: Colors.black),
                   'Purchases',
-                  _isSidebarExpanded,
-                ),
-
-                _buildMenuItem(
-                  4,
-                  const Icon(Icons.bar_chart, color: Colors.black),
-                  'Stats',
                   _isSidebarExpanded,
                 ),
 

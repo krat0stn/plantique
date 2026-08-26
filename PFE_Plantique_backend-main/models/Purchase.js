@@ -13,8 +13,9 @@ const PurchaseSchema = new Schema(
     qte:         { type: Number, required: true, min: 1 },
     userInfo:    { type: String, trim: true },                 // buyer's name/email snapshot
     userId:      { type: Schema.Types.ObjectId, ref: "User" },
-    price:       { type: Number, required: true },
-    date:        { type: Date, default: Date.now },
+    price:          { type: Number, required: true },
+    receiptNumber:  { type: String, default: null, index: true },
+    date:           { type: Date, default: Date.now },
   },
   { timestamps: true }
 );

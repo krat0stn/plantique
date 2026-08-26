@@ -150,7 +150,7 @@ exports.adminList = async (req, res) => {
 // POST /api/suppliers
 exports.create = async (req, res) => {
   try {
-    const { firstName, lastName, shopName, shopType, email, password, phone, location, bio } = req.body;
+    const { firstName, lastName, shopName, shopType, email, password, phone, location, bio, subscriptionStart, subscriptionEnd } = req.body;
 
     let logoUrl, logoPublicId;
     if (req.file) {
@@ -177,6 +177,8 @@ exports.create = async (req, res) => {
       bio:      bio      || undefined,
       logoUrl,
       logoPublicId,
+      subscriptionStart: subscriptionStart ? new Date(subscriptionStart) : undefined,
+      subscriptionEnd:   subscriptionEnd   ? new Date(subscriptionEnd)   : undefined,
     });
 
     res.status(201).json(toSafeSupplier(supplier));
@@ -191,7 +193,7 @@ exports.update = async (req, res) => {
     const supplier = await Supplier.findById(req.params.id);
     if (!supplier) return res.status(404).json({ error: "Supplier not found" });
 
-    const { firstName, lastName, shopName, shopType, email, password, phone, location, bio, isActive } = req.body;
+    const { firstName, lastName, shopName, shopType, email, password, phone, location, bio, isActive, subscriptionStart, subscriptionEnd } = req.body;
 
     if (firstName !== undefined) supplier.firstName = firstName;
     if (lastName  !== undefined) supplier.lastName  = lastName;
@@ -202,6 +204,8 @@ exports.update = async (req, res) => {
     if (location  !== undefined) supplier.location  = location || undefined;
     if (bio       !== undefined) supplier.bio       = bio      || undefined;
     if (isActive  !== undefined) supplier.isActive  = isActive !== "false";
+    if (subscriptionStart !== undefined) supplier.subscriptionStart = subscriptionStart ? new Date(subscriptionStart) : null;
+    if (subscriptionEnd   !== undefined) supplier.subscriptionEnd   = subscriptionEnd   ? new Date(subscriptionEnd)   : null;
 
     // Only touch the password if a new one was actually submitted
     if (password) {

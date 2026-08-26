@@ -1,4 +1,6 @@
+import 'dart:html' as html;
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 import 'package:pfe_dash/services/api_service.dart';
 
 class SupplierPurchaseModel {
@@ -8,6 +10,7 @@ class SupplierPurchaseModel {
   final String userInfo;
   final double price;
   final DateTime date;
+  final String? receiptNumber;
 
   SupplierPurchaseModel({
     required this.id,
@@ -16,13 +19,15 @@ class SupplierPurchaseModel {
     required this.userInfo,
     required this.price,
     required this.date,
+    this.receiptNumber,
   });
 
   factory SupplierPurchaseModel.fromJson(Map<String, dynamic> json) {
     DateTime parsedDate;
     try {
       parsedDate = DateTime.parse(
-          (json['date'] ?? json['createdAt'])?.toString() ?? '');
+        (json['date'] ?? json['createdAt'])?.toString() ?? '',
+      );
     } catch (_) {
       parsedDate = DateTime.now();
     }
@@ -35,16 +40,17 @@ class SupplierPurchaseModel {
     }
 
     return SupplierPurchaseModel(
-      id:       json['_id']?.toString() ?? '',
-      article:  json['article']?.toString() ?? '',
-      qte:      (json['qte'] is int)
-                    ? json['qte']
-                    : int.tryParse(json['qte'].toString()) ?? 0,
+      id: json['_id']?.toString() ?? '',
+      article: json['article']?.toString() ?? '',
+      qte: (json['qte'] is int)
+          ? json['qte']
+          : int.tryParse(json['qte'].toString()) ?? 0,
       userInfo: resolvedUserInfo,
-      price:    (json['price'] is num)
-                    ? (json['price'] as num).toDouble()
-                    : double.tryParse(json['price'].toString()) ?? 0.0,
-      date:     parsedDate,
+      price: (json['price'] is num)
+          ? (json['price'] as num).toDouble()
+          : double.tryParse(json['price'].toString()) ?? 0.0,
+      date: parsedDate,
+      receiptNumber: json['receiptNumber']?.toString(),
     );
   }
 }
@@ -61,10 +67,44 @@ class _SupplierPurchasesPageState extends State<SupplierPurchasesPage> {
   bool loading = true;
   String? error;
 
-  // Summary stats
-  int get totalOrders => purchases.length;
-  double get totalRevenue => purchases.fold(0.0, (sum, p) => sum + p.price);
-  int get totalItems => purchases.fold(0, (sum, p) => sum + p.qte);
+  Future<void> _downloadReceipt(
+    String purchaseId,
+    String? receiptNumber,
+  ) async {
+    try {
+      final url = Uri.parse(
+        '${ApiService.baseUrl}/supplier-dashboard/purchases/$purchaseId/receipt',
+      );
+      final response = await http.get(
+        url,
+        headers: {'Authorization': 'Bearer ${ApiService.token}'},
+      );
+
+      if (response.statusCode == 200) {
+        final blob = html.Blob([response.bodyBytes], 'application/pdf');
+        final blobUrl = html.Url.createObjectUrlFromBlob(blob);
+        html.AnchorElement(href: blobUrl)
+          ..setAttribute(
+            'download',
+            'receipt-${receiptNumber ?? purchaseId}.pdf',
+          )
+          ..click();
+        html.Url.revokeObjectUrl(blobUrl);
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Failed to download receipt')),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error: $e')));
+      }
+    }
+  }
 
   @override
   void initState() {
@@ -73,7 +113,10 @@ class _SupplierPurchasesPageState extends State<SupplierPurchasesPage> {
   }
 
   Future<void> loadPurchases() async {
-    setState(() { loading = true; error = null; });
+    setState(() {
+      loading = true;
+      error = null;
+    });
     try {
       final data = await ApiService.get('/supplier-dashboard/purchases');
       final List<dynamic> list = data['data'] ?? [];
@@ -87,26 +130,6 @@ class _SupplierPurchasesPageState extends State<SupplierPurchasesPage> {
     }
   }
 
-  Widget _statCard(String label, String value, IconData icon, Color color) {
-    return Card(
-      elevation: 3,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 18),
-        child: Column(
-          children: [
-            Icon(icon, color: color, size: 32),
-            const SizedBox(height: 8),
-            Text(value,
-              style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: color)),
-            const SizedBox(height: 4),
-            Text(label, style: const TextStyle(color: Colors.grey, fontSize: 13)),
-          ],
-        ),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -118,19 +141,11 @@ class _SupplierPurchasesPageState extends State<SupplierPurchasesPage> {
           children: [
             Row(
               children: [
-                const Text('Purchases', style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold)),
-                const SizedBox(width: 16),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: Colors.green.shade50,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: const Text(
-                    'Read-only — auto-generated from user orders',
-                    style: TextStyle(color: Colors.green, fontSize: 12),
-                  ),
+                const Text(
+                  'Purchases',
+                  style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
                 ),
+                const SizedBox(width: 16),
                 const Spacer(),
                 ElevatedButton.icon(
                   onPressed: loadPurchases,
@@ -140,50 +155,60 @@ class _SupplierPurchasesPageState extends State<SupplierPurchasesPage> {
               ],
             ),
             const SizedBox(height: 20),
-            if (!loading && error == null) ...[
-              // Summary stats cards
-              Row(
-                children: [
-                  Expanded(child: _statCard('Total Orders', totalOrders.toString(), Icons.receipt_long, Colors.blue)),
-                  const SizedBox(width: 12),
-                  Expanded(child: _statCard('Total Revenue', '\$${totalRevenue.toStringAsFixed(2)}', Icons.attach_money, Colors.green)),
-                  const SizedBox(width: 12),
-                  Expanded(child: _statCard('Items Sold', totalItems.toString(), Icons.inventory, Colors.orange)),
-                ],
-              ),
-              const SizedBox(height: 20),
-            ],
             if (loading)
               const Expanded(child: Center(child: CircularProgressIndicator()))
             else if (error != null)
-              Expanded(child: Center(child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(error!, style: const TextStyle(color: Colors.red)),
-                  const SizedBox(height: 10),
-                  ElevatedButton(onPressed: loadPurchases, child: const Text('Retry')),
-                ],
-              )))
-            else if (purchases.isEmpty)
-              const Expanded(child: Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(Icons.shopping_bag_outlined, size: 64, color: Colors.grey),
-                    SizedBox(height: 16),
-                    Text('No purchases yet.',
-                      style: TextStyle(color: Colors.grey, fontSize: 18, fontWeight: FontWeight.w500)),
-                    SizedBox(height: 8),
-                    Text('Purchases will appear here when users order your products.',
-                      style: TextStyle(color: Colors.grey, fontSize: 14)),
-                  ],
+              Expanded(
+                child: Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(error!, style: const TextStyle(color: Colors.red)),
+                      const SizedBox(height: 10),
+                      ElevatedButton(
+                        onPressed: loadPurchases,
+                        child: const Text('Retry'),
+                      ),
+                    ],
+                  ),
                 ),
-              ))
+              )
+            else if (purchases.isEmpty)
+              const Expanded(
+                child: Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.shopping_bag_outlined,
+                        size: 64,
+                        color: Colors.grey,
+                      ),
+                      SizedBox(height: 16),
+                      Text(
+                        'No purchases yet.',
+                        style: TextStyle(
+                          color: Colors.grey,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      SizedBox(height: 8),
+                      Text(
+                        'Purchases will appear here when users order your products.',
+                        style: TextStyle(color: Colors.grey, fontSize: 14),
+                      ),
+                    ],
+                  ),
+                ),
+              )
             else
               Expanded(
                 child: Card(
                   elevation: 5,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(12),
                     child: SingleChildScrollView(
@@ -192,25 +217,108 @@ class _SupplierPurchasesPageState extends State<SupplierPurchasesPage> {
                         scrollDirection: Axis.horizontal,
                         child: DataTable(
                           headingRowColor: WidgetStateProperty.all(
-                            const Color.fromARGB(186, 234, 143, 143).withValues(alpha: 0.3)),
+                            const Color.fromARGB(
+                              186,
+                              234,
+                              143,
+                              143,
+                            ).withValues(alpha: 0.3),
+                          ),
                           columns: const [
-                            DataColumn(label: Text('Article', style: TextStyle(fontWeight: FontWeight.bold))),
-                            DataColumn(label: Text('Qty', style: TextStyle(fontWeight: FontWeight.bold))),
-                            DataColumn(label: Text('User Info', style: TextStyle(fontWeight: FontWeight.bold))),
-                            DataColumn(label: Text('Date', style: TextStyle(fontWeight: FontWeight.bold))),
-                            DataColumn(label: Text('Price', style: TextStyle(fontWeight: FontWeight.bold))),
+                            DataColumn(
+                              label: Text(
+                                'Receipt #',
+                                style: TextStyle(fontWeight: FontWeight.bold),
+                              ),
+                            ),
+                            DataColumn(
+                              label: Text(
+                                'Article',
+                                style: TextStyle(fontWeight: FontWeight.bold),
+                              ),
+                            ),
+                            DataColumn(
+                              label: Text(
+                                'Qty',
+                                style: TextStyle(fontWeight: FontWeight.bold),
+                              ),
+                            ),
+                            DataColumn(
+                              label: Text(
+                                'User Info',
+                                style: TextStyle(fontWeight: FontWeight.bold),
+                              ),
+                            ),
+                            DataColumn(
+                              label: Text(
+                                'Date',
+                                style: TextStyle(fontWeight: FontWeight.bold),
+                              ),
+                            ),
+                            DataColumn(
+                              label: Text(
+                                'Price',
+                                style: TextStyle(fontWeight: FontWeight.bold),
+                              ),
+                            ),
+                            DataColumn(
+                              label: Text(
+                                'Receipt',
+                                style: TextStyle(fontWeight: FontWeight.bold),
+                              ),
+                            ),
                           ],
                           rows: purchases.map((p) {
                             final dateStr =
-                              '${p.date.year}-${p.date.month.toString().padLeft(2,'0')}-${p.date.day.toString().padLeft(2,'0')}';
-                            return DataRow(cells: [
-                              DataCell(Text(p.article, style: const TextStyle(fontWeight: FontWeight.w500))),
-                              DataCell(Text(p.qte.toString())),
-                              DataCell(SizedBox(width: 200, child: Text(p.userInfo))),
-                              DataCell(Text(dateStr)),
-                              DataCell(Text('\$${p.price.toStringAsFixed(2)}',
-                                style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.green))),
-                            ]);
+                                '${p.date.year}-${p.date.month.toString().padLeft(2, '0')}-${p.date.day.toString().padLeft(2, '0')}';
+                            return DataRow(
+                              cells: [
+                                DataCell(
+                                  Text(
+                                    p.receiptNumber ?? '—',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w600,
+                                      color: p.receiptNumber != null
+                                          ? Colors.blue
+                                          : Colors.grey,
+                                    ),
+                                  ),
+                                ),
+                                DataCell(
+                                  Text(
+                                    p.article,
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ),
+                                DataCell(Text(p.qte.toString())),
+                                DataCell(
+                                  SizedBox(width: 200, child: Text(p.userInfo)),
+                                ),
+                                DataCell(Text(dateStr)),
+                                DataCell(
+                                  Text(
+                                    '\$${p.price.toStringAsFixed(2)}',
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w600,
+                                      color: Colors.green,
+                                    ),
+                                  ),
+                                ),
+                                DataCell(
+                                  IconButton(
+                                    icon: const Icon(
+                                      Icons.download,
+                                      color: Colors.blue,
+                                    ),
+                                    tooltip: 'Download Receipt',
+                                    onPressed: () =>
+                                        _downloadReceipt(p.id, p.receiptNumber),
+                                  ),
+                                ),
+                              ],
+                            );
                           }).toList(),
                         ),
                       ),

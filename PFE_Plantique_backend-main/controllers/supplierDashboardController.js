@@ -10,6 +10,8 @@ const Blog     = require("../models/Blog");
 const Purchase = require("../models/Purchase");
 const Supplier = require("../models/Supplier");
 const User     = require("../models/User");
+const PDFDocument = require("pdfkit");
+const XLSX = require("xlsx");
 const cloudinary = require("cloudinary").v2;
 
 const {
@@ -29,6 +31,13 @@ const uploadToCloudinary = (buffer, folder) =>
     );
     stream.end(buffer);
   });
+
+// Generate next receipt number for a supplier (RE01, RE02, ...)
+const getNextReceiptNumber = async (supplierId) => {
+  const count = await Purchase.countDocuments({ supplierId });
+  const num = count + 1;
+  return `RE${String(num).padStart(2, "0")}`;
+};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // PRODUCTS
@@ -137,6 +146,70 @@ exports.deleteProduct = async (req, res) => {
     res.json({ message: "Product deleted" });
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+};
+
+// POST /api/supplier-dashboard/products/import
+// Accepts a CSV or Excel file. Expected columns: name, category, price, quantity, description, inStock
+exports.importProducts = async (req, res) => {
+  try {
+    const supplierId = req.user.supplierId;
+
+    if (!req.file) {
+      return res.status(400).json({ error: "No file uploaded" });
+    }
+
+    const workbook = XLSX.read(req.file.buffer, { type: "buffer" });
+    const sheetName = workbook.SheetNames[0];
+    const rows = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName]);
+
+    if (rows.length === 0) {
+      return res.status(400).json({ error: "File is empty" });
+    }
+
+    const products = [];
+    const errors = [];
+
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      const name = (row.name || row.Name || "").toString().trim();
+      const category = (row.category || row.Category || "").toString().trim();
+      const price = parseFloat(row.price ?? row.Price);
+      const quantity = parseInt(row.quantity ?? row.Quantity ?? "0", 10);
+      const description = (row.description ?? row.Description ?? "").toString().trim();
+      const inStockRaw = row.inStock ?? row.InStock ?? row.in_stock ?? "true";
+      const inStock = inStockRaw === "false" || inStockRaw === "0" ? false : true;
+
+      if (!name || !category || isNaN(price)) {
+        errors.push(`Row ${i + 2}: missing name, category, or invalid price`);
+        continue;
+      }
+
+      products.push({
+        name,
+        category,
+        price,
+        quantity: isNaN(quantity) ? 0 : quantity,
+        description,
+        inStock,
+        supplier: supplierId,
+      });
+    }
+
+    let created = [];
+    if (products.length > 0) {
+      created = await Product.insertMany(products);
+    }
+
+    res.status(201).json({
+      data: {
+        imported: created.length,
+        errors: errors,
+        totalRows: rows.length,
+      },
+    });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
   }
 };
 
@@ -452,6 +525,8 @@ exports.recordPurchase = async (req, res) => {
       if (user) resolvedUserInfo = `${user.username} (${user.email})`;
     }
 
+    const receiptNumber = await getNextReceiptNumber(supplierId);
+
     const purchase = await Purchase.create({
       supplierId,
       productId,
@@ -460,6 +535,7 @@ exports.recordPurchase = async (req, res) => {
       userInfo: resolvedUserInfo || "Unknown",
       userId,
       price: price !== undefined ? Number(price) : product.price * Number(qte),
+      receiptNumber,
       date: new Date(),
     });
 
@@ -471,6 +547,105 @@ exports.recordPurchase = async (req, res) => {
     res.status(201).json({ data: purchase });
   } catch (err) {
     res.status(400).json({ error: err.message });
+  }
+};
+
+// GET /api/supplier-dashboard/purchases/:id/receipt
+exports.getReceipt = async (req, res) => {
+  try {
+    const supplierId = req.user.supplierId;
+    const purchase = await Purchase.findById(req.params.id)
+      .populate("productId", "name category price")
+      .populate("userId", "username email");
+
+    if (!purchase) return res.status(404).json({ error: "Purchase not found" });
+    if (purchase.supplierId.toString() !== supplierId) {
+      return res.status(403).json({ error: "Access denied" });
+    }
+
+    const supplier = await Supplier.findById(supplierId).select(
+      "shopName email phone location logoUrl"
+    );
+
+    const doc = new PDFDocument({ size: "A4", margin: 50 });
+
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="receipt-${purchase.receiptNumber || purchase._id}.pdf"`
+    );
+    doc.pipe(res);
+
+    // Header
+    doc.fontSize(22).font("Helvetica-Bold").text(supplier?.shopName || "Plantique Shop", { align: "center" });
+    doc.fontSize(10).font("Helvetica").fillColor("#666666");
+    if (supplier?.email) doc.text(supplier.email, { align: "center" });
+    if (supplier?.phone) doc.text(supplier.phone, { align: "center" });
+    if (supplier?.location) doc.text(supplier.location, { align: "center" });
+    doc.moveDown(0.5);
+
+    // Divider
+    doc.strokeColor("#cccccc").lineWidth(1).moveTo(50, doc.y).lineTo(545, doc.y).stroke();
+    doc.moveDown(0.5);
+
+    // Receipt info
+    doc.fillColor("#000000").fontSize(12).font("Helvetica-Bold");
+    doc.text(`Receipt #: ${purchase.receiptNumber || "N/A"}`);
+    doc.font("Helvetica").fontSize(10).fillColor("#333333");
+    const dateStr = purchase.date
+      ? new Date(purchase.date).toLocaleDateString("en-US", {
+          year: "numeric",
+          month: "long",
+          day: "numeric",
+        })
+      : "N/A";
+    doc.text(`Date: ${dateStr}`);
+    doc.text(`Customer: ${purchase.userInfo || "Unknown"}`);
+    doc.moveDown(0.5);
+
+    // Divider
+    doc.strokeColor("#cccccc").moveTo(50, doc.y).lineTo(545, doc.y).stroke();
+    doc.moveDown(0.5);
+
+    // Table header
+    const tableTop = doc.y;
+    const colX = [50, 280, 350, 420, 470];
+    doc.fontSize(10).font("Helvetica-Bold").fillColor("#000000");
+    doc.text("Article", colX[0], tableTop, { width: 220 });
+    doc.text("Qty", colX[1], tableTop, { width: 60, align: "right" });
+    doc.text("Unit Price", colX[2], tableTop, { width: 60, align: "right" });
+    doc.text("Total", colX[3], tableTop, { width: 60, align: "right" });
+
+    doc.moveDown(0.3);
+    doc.strokeColor("#cccccc").moveTo(50, doc.y).lineTo(545, doc.y).stroke();
+    doc.moveDown(0.3);
+
+    // Table row
+    doc.font("Helvetica").fontSize(10).fillColor("#333333");
+    const rowY = doc.y;
+    const unitPrice = purchase.productId?.price || purchase.price / purchase.qte;
+    doc.text(purchase.article || "N/A", colX[0], rowY, { width: 220 });
+    doc.text(String(purchase.qte), colX[1], rowY, { width: 60, align: "right" });
+    doc.text(`$${unitPrice.toFixed(2)}`, colX[2], rowY, { width: 60, align: "right" });
+    doc.text(`$${purchase.price.toFixed(2)}`, colX[3], rowY, { width: 60, align: "right" });
+
+    doc.moveDown(1);
+    doc.strokeColor("#cccccc").moveTo(50, doc.y).lineTo(545, doc.y).stroke();
+    doc.moveDown(0.5);
+
+    // Grand total
+    doc.fontSize(12).font("Helvetica-Bold").fillColor("#000000");
+    doc.text(`Grand Total: $${purchase.price.toFixed(2)}`, { align: "right" });
+
+    doc.moveDown(2);
+
+    // Footer
+    doc.fontSize(10).font("Helvetica").fillColor("#888888");
+    doc.text("Thank you for your purchase!", { align: "center" });
+
+    doc.end();
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 };
 

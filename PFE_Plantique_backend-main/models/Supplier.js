@@ -15,6 +15,8 @@ const SupplierSchema = new Schema(
     logoUrl:      { type: String, trim: true },
     logoPublicId: { type: String, trim: true },
     isActive:     { type: Boolean, default: true },
+    subscriptionStart: { type: Date, default: null },
+    subscriptionEnd:   { type: Date, default: null },
   },
   { timestamps: true }
 );

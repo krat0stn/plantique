@@ -149,6 +149,44 @@ class _SupplierProductsPageState extends State<SupplierProductsPage> {
     }
   }
 
+  Future<void> importProducts() async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['csv', 'xlsx', 'xls'],
+      withData: true,
+    );
+    if (result == null || result.files.isEmpty) return;
+
+    final file = result.files.first;
+    try {
+      final fileBytes = http.MultipartFile.fromBytes(
+        'file',
+        file.bytes!,
+        filename: file.name,
+      );
+      final response = await ApiService.multipartRequest(
+        'POST',
+        '/supplier-dashboard/products/import',
+        {},
+        [fileBytes],
+      );
+      final imported = response['data']?['imported'] ?? 0;
+      final errors = response['data']?['errors'] ?? [];
+      if (mounted) {
+        String msg = '$imported product(s) imported.';
+        if (errors.isNotEmpty) {
+          msg += ' ${errors.length} row(s) had errors.';
+        }
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+      }
+      await loadProducts();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Import failed: $e')));
+      }
+    }
+  }
+
   Future<void> deleteProduct(SupplierProductModel p) async {
     final confirm = await showDialog<bool>(
       context: context,
@@ -294,6 +332,12 @@ class _SupplierProductsPageState extends State<SupplierProductsPage> {
                   onPressed: () => loadProducts(),
                   icon: const Icon(Icons.refresh),
                   label: const Text('Refresh'),
+                ),
+                const SizedBox(width: 10),
+                ElevatedButton.icon(
+                  onPressed: importProducts,
+                  icon: const Icon(Icons.upload_file),
+                  label: const Text('Import CSV/Excel'),
                 ),
                 const SizedBox(width: 10),
                 ElevatedButton.icon(

@@ -31,6 +31,7 @@ const adminPlantCareRoutes = require("./routes/adminPlantCareRoutes");
 const storeRoutes    = require("./routes/productRoutes");
 const supplierRoutes = require("./routes/supplierRoutes");
 const supplierDashboardRoutes = require("./routes/supplierDashboardRoutes");
+const adminEventRoutes = require("./routes/adminEventRoutes");
 
 const app = express();
 const server = http.createServer(app);
@@ -89,6 +90,7 @@ app.use("/api/admin/plant-care", adminPlantCareRoutes);
 
 app.use("/api/admin/blogs", adminBlogRoutes);
 app.use("/api/admin/postes", adminPosteRoutes);
+app.use("/api/admin/events", adminEventRoutes);
 app.use("/api/admin/dashboard", dashboardRoutes);
 
 app.use("/api/store",     storeRoutes);

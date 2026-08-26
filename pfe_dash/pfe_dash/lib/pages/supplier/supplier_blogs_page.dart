@@ -4,12 +4,12 @@ import 'package:file_picker/file_picker.dart';
 import 'package:http/http.dart' as http;
 
 const _kStatusColors = {
-  'pending':  Color(0xFFFFF3CD),
+  'pending': Color(0xFFFFF3CD),
   'approved': Color(0xFFD4EDDA),
   'declined': Color(0xFFF8D7DA),
 };
 const _kStatusTextColors = {
-  'pending':  Color(0xFF856404),
+  'pending': Color(0xFF856404),
   'approved': Color(0xFF155724),
   'declined': Color(0xFF721C24),
 };
@@ -41,12 +41,12 @@ class SupplierBlogModel {
       parsedDate = DateTime.now();
     }
     return SupplierBlogModel(
-      id:        json['_id']?.toString() ?? '',
-      title:     json['title']?.toString() ?? '',
-      content:   json['content']?.toString() ?? '',
-      excerpt:   json['excerpt']?.toString() ?? '',
-      imageUrl:  json['imageUrl']?.toString() ?? '',
-      status:    json['status']?.toString() ?? 'pending',
+      id: json['_id']?.toString() ?? '',
+      title: json['title']?.toString() ?? '',
+      content: json['content']?.toString() ?? '',
+      excerpt: json['excerpt']?.toString() ?? '',
+      imageUrl: json['imageUrl']?.toString() ?? '',
+      status: json['status']?.toString() ?? 'pending',
       createdAt: parsedDate,
     );
   }
@@ -72,7 +72,10 @@ class _SupplierBlogsPageState extends State<SupplierBlogsPage> {
   }
 
   Future<void> loadBlogs() async {
-    setState(() { loading = true; error = null; });
+    setState(() {
+      loading = true;
+      error = null;
+    });
     try {
       final data = await ApiService.get('/supplier-dashboard/blogs');
       final List<dynamic> list = data['data'] ?? [];
@@ -87,14 +90,21 @@ class _SupplierBlogsPageState extends State<SupplierBlogsPage> {
   }
 
   Future<void> pickImage() async {
-    final result = await FilePicker.platform.pickFiles(type: FileType.image, withData: true);
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.image,
+      withData: true,
+    );
     if (result != null) setState(() => selectedImage = result.files.first);
   }
 
   List<http.MultipartFile> _buildFiles() {
     if (selectedImage == null) return [];
     return [
-      http.MultipartFile.fromBytes('image', selectedImage!.bytes!, filename: selectedImage!.name)
+      http.MultipartFile.fromBytes(
+        'image',
+        selectedImage!.bytes!,
+        filename: selectedImage!.name,
+      ),
     ];
   }
 
@@ -110,31 +120,45 @@ class _SupplierBlogsPageState extends State<SupplierBlogsPage> {
         'excerpt': excerpt,
       }, _buildFiles());
       selectedImage = null;
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Blog created — pending admin review')));
+      if (mounted)
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Blog created — pending admin review')),
+        );
       await loadBlogs();
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+      if (mounted)
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error: $e')));
     }
   }
 
-  Future<void> updateBlog(String blogId, {
+  Future<void> updateBlog(
+    String blogId, {
     required String title,
     required String content,
     required String excerpt,
   }) async {
     try {
-      await ApiService.multipartRequest('PUT', '/supplier-dashboard/blogs/$blogId', {
-        'title': title,
-        'content': content,
-        'excerpt': excerpt,
-      }, _buildFiles());
+      await ApiService.multipartRequest(
+        'PUT',
+        '/supplier-dashboard/blogs/$blogId',
+        {'title': title, 'content': content, 'excerpt': excerpt},
+        _buildFiles(),
+      );
       selectedImage = null;
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Blog updated — returned to pending review')));
+      if (mounted)
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Blog updated — returned to pending review'),
+          ),
+        );
       await loadBlogs();
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+      if (mounted)
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error: $e')));
     }
   }
 
@@ -145,7 +169,10 @@ class _SupplierBlogsPageState extends State<SupplierBlogsPage> {
         title: const Text('Delete blog?'),
         content: Text('Delete "${b.title}"? This cannot be undone.'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
@@ -158,14 +185,20 @@ class _SupplierBlogsPageState extends State<SupplierBlogsPage> {
     try {
       await ApiService.delete('/supplier-dashboard/blogs/${b.id}');
       setState(() => blogs.removeWhere((x) => x.id == b.id));
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('"${b.title}" deleted')));
+      if (mounted)
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('"${b.title}" deleted')));
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+      if (mounted)
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error: $e')));
     }
   }
 
   void _showBlogDialog({SupplierBlogModel? blog}) {
-    final titleCtrl   = TextEditingController(text: blog?.title ?? '');
+    final titleCtrl = TextEditingController(text: blog?.title ?? '');
     final contentCtrl = TextEditingController(text: blog?.content ?? '');
     final excerptCtrl = TextEditingController(text: blog?.excerpt ?? '');
     selectedImage = null;
@@ -189,14 +222,25 @@ class _SupplierBlogsPageState extends State<SupplierBlogsPage> {
                         border: Border.all(color: Colors.amber.shade300),
                         borderRadius: BorderRadius.circular(8),
                       ),
-                      child: const Row(children: [
-                        Icon(Icons.info_outline, color: Colors.amber, size: 18),
-                        SizedBox(width: 8),
-                        Expanded(child: Text(
-                          'New blogs require admin approval before they are published.',
-                          style: TextStyle(fontSize: 12, color: Colors.brown),
-                        )),
-                      ]),
+                      child: const Row(
+                        children: [
+                          Icon(
+                            Icons.info_outline,
+                            color: Colors.amber,
+                            size: 18,
+                          ),
+                          SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'New blogs require admin approval before they are published.',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.brown,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                     const SizedBox(height: 14),
                   ],
@@ -206,14 +250,19 @@ class _SupplierBlogsPageState extends State<SupplierBlogsPage> {
                       setDialogState(() {});
                     },
                     icon: const Icon(Icons.image),
-                    label: Text(selectedImage == null
-                        ? 'Attach cover image (optional)'
-                        : 'Image: ${selectedImage!.name}'),
+                    label: Text(
+                      selectedImage == null
+                          ? 'Attach cover image (optional)'
+                          : 'Image: ${selectedImage!.name}',
+                    ),
                   ),
                   const SizedBox(height: 14),
                   TextField(
                     controller: titleCtrl,
-                    decoration: const InputDecoration(labelText: 'Title *', border: OutlineInputBorder()),
+                    decoration: const InputDecoration(
+                      labelText: 'Title *',
+                      border: OutlineInputBorder(),
+                    ),
                   ),
                   const SizedBox(height: 12),
                   TextField(
@@ -222,25 +271,36 @@ class _SupplierBlogsPageState extends State<SupplierBlogsPage> {
                     decoration: const InputDecoration(
                       labelText: 'Excerpt (optional)',
                       hintText: 'Short summary shown in listings',
-                      border: OutlineInputBorder()),
+                      border: OutlineInputBorder(),
+                    ),
                   ),
                   const SizedBox(height: 12),
                   TextField(
                     controller: contentCtrl,
                     maxLines: 8,
-                    decoration: const InputDecoration(labelText: 'Content *', border: OutlineInputBorder()),
+                    decoration: const InputDecoration(
+                      labelText: 'Content *',
+                      border: OutlineInputBorder(),
+                    ),
                   ),
                 ],
               ),
             ),
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel'),
+            ),
             ElevatedButton(
               onPressed: () async {
-                if (titleCtrl.text.trim().isEmpty || contentCtrl.text.trim().isEmpty) {
+                if (titleCtrl.text.trim().isEmpty ||
+                    contentCtrl.text.trim().isEmpty) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Title and content are required')));
+                    const SnackBar(
+                      content: Text('Title and content are required'),
+                    ),
+                  );
                   return;
                 }
                 Navigator.pop(ctx);
@@ -296,19 +356,11 @@ class _SupplierBlogsPageState extends State<SupplierBlogsPage> {
           children: [
             Row(
               children: [
-                const Text('Blogs', style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold)),
-                const SizedBox(width: 16),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: Colors.blue.shade50,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: const Text(
-                    'New & edited blogs require admin approval',
-                    style: TextStyle(color: Colors.blue, fontSize: 12),
-                  ),
+                const Text(
+                  'Blogs',
+                  style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
                 ),
+                const SizedBox(width: 16),
                 const Spacer(),
                 ElevatedButton.icon(
                   onPressed: loadBlogs,
@@ -327,61 +379,138 @@ class _SupplierBlogsPageState extends State<SupplierBlogsPage> {
             if (loading)
               const Expanded(child: Center(child: CircularProgressIndicator()))
             else if (error != null)
-              Expanded(child: Center(child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(error!, style: const TextStyle(color: Colors.red)),
-                  const SizedBox(height: 10),
-                  ElevatedButton(onPressed: loadBlogs, child: const Text('Retry')),
-                ],
-              )))
+              Expanded(
+                child: Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(error!, style: const TextStyle(color: Colors.red)),
+                      const SizedBox(height: 10),
+                      ElevatedButton(
+                        onPressed: loadBlogs,
+                        child: const Text('Retry'),
+                      ),
+                    ],
+                  ),
+                ),
+              )
             else if (blogs.isEmpty)
-              const Expanded(child: Center(
-                child: Text('No blogs yet. Click "New Blog" to create one.',
-                  style: TextStyle(color: Colors.grey, fontSize: 16)),
-              ))
+              const Expanded(
+                child: Center(
+                  child: Text(
+                    'No blogs yet. Click "New Blog" to create one.',
+                    style: TextStyle(color: Colors.grey, fontSize: 16),
+                  ),
+                ),
+              )
             else
               Expanded(
                 child: Card(
                   elevation: 5,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(12),
                     child: SingleChildScrollView(
                       child: DataTable(
                         headingRowColor: WidgetStateProperty.all(
-                          const Color.fromARGB(186, 234, 143, 143).withValues(alpha: 0.3)),
+                          const Color.fromARGB(
+                            186,
+                            234,
+                            143,
+                            143,
+                          ).withValues(alpha: 0.3),
+                        ),
                         columns: const [
-                          DataColumn(label: Text('Title', style: TextStyle(fontWeight: FontWeight.bold))),
-                          DataColumn(label: Text('Excerpt', style: TextStyle(fontWeight: FontWeight.bold))),
-                          DataColumn(label: Text('Status', style: TextStyle(fontWeight: FontWeight.bold))),
-                          DataColumn(label: Text('Date', style: TextStyle(fontWeight: FontWeight.bold))),
-                          DataColumn(label: Text('Actions', style: TextStyle(fontWeight: FontWeight.bold))),
+                          DataColumn(
+                            label: Text(
+                              'Title',
+                              style: TextStyle(fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                          DataColumn(
+                            label: Text(
+                              'Excerpt',
+                              style: TextStyle(fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                          DataColumn(
+                            label: Text(
+                              'Status',
+                              style: TextStyle(fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                          DataColumn(
+                            label: Text(
+                              'Date',
+                              style: TextStyle(fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                          DataColumn(
+                            label: Text(
+                              'Actions',
+                              style: TextStyle(fontWeight: FontWeight.bold),
+                            ),
+                          ),
                         ],
                         rows: blogs.map((b) {
                           final excerpt = b.excerpt.isNotEmpty
-                              ? (b.excerpt.length > 60 ? '${b.excerpt.substring(0, 60)}…' : b.excerpt)
-                              : (b.content.length > 60 ? '${b.content.substring(0, 60)}…' : b.content);
-                          return DataRow(cells: [
-                            DataCell(Text(b.title, style: const TextStyle(fontWeight: FontWeight.w500))),
-                            DataCell(SizedBox(width: 220, child: Text(excerpt, style: const TextStyle(color: Colors.grey)))),
-                            DataCell(_statusBadge(b.status)),
-                            DataCell(Text(
-                              '${b.createdAt.year}-${b.createdAt.month.toString().padLeft(2,'0')}-${b.createdAt.day.toString().padLeft(2,'0')}',
-                            )),
-                            DataCell(Row(children: [
-                              IconButton(
-                                icon: const Icon(Icons.edit, color: Colors.blue),
-                                tooltip: 'Edit',
-                                onPressed: () => _showBlogDialog(blog: b),
+                              ? (b.excerpt.length > 60
+                                    ? '${b.excerpt.substring(0, 60)}…'
+                                    : b.excerpt)
+                              : (b.content.length > 60
+                                    ? '${b.content.substring(0, 60)}…'
+                                    : b.content);
+                          return DataRow(
+                            cells: [
+                              DataCell(
+                                Text(
+                                  b.title,
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
                               ),
-                              IconButton(
-                                icon: const Icon(Icons.delete, color: Colors.red),
-                                tooltip: 'Delete',
-                                onPressed: () => deleteBlog(b),
+                              DataCell(
+                                SizedBox(
+                                  width: 220,
+                                  child: Text(
+                                    excerpt,
+                                    style: const TextStyle(color: Colors.grey),
+                                  ),
+                                ),
                               ),
-                            ])),
-                          ]);
+                              DataCell(_statusBadge(b.status)),
+                              DataCell(
+                                Text(
+                                  '${b.createdAt.year}-${b.createdAt.month.toString().padLeft(2, '0')}-${b.createdAt.day.toString().padLeft(2, '0')}',
+                                ),
+                              ),
+                              DataCell(
+                                Row(
+                                  children: [
+                                    IconButton(
+                                      icon: const Icon(
+                                        Icons.edit,
+                                        color: Colors.blue,
+                                      ),
+                                      tooltip: 'Edit',
+                                      onPressed: () => _showBlogDialog(blog: b),
+                                    ),
+                                    IconButton(
+                                      icon: const Icon(
+                                        Icons.delete,
+                                        color: Colors.red,
+                                      ),
+                                      tooltip: 'Delete',
+                                      onPressed: () => deleteBlog(b),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          );
                         }).toList(),
                       ),
                     ),

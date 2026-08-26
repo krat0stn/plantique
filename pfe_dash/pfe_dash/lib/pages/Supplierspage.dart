@@ -35,6 +35,8 @@ class SupplierModel {
   final bool isActive;
   final int productCount;
   final DateTime createdAt;
+  final DateTime? subscriptionStart;
+  final DateTime? subscriptionEnd;
 
   SupplierModel({
     required this.id,
@@ -50,6 +52,8 @@ class SupplierModel {
     required this.isActive,
     required this.productCount,
     required this.createdAt,
+    this.subscriptionStart,
+    this.subscriptionEnd,
   });
 
   factory SupplierModel.fromJson(Map<String, dynamic> json) {
@@ -58,6 +62,15 @@ class SupplierModel {
       parsedDate = DateTime.parse(json['createdAt']?.toString() ?? '');
     } catch (_) {
       parsedDate = DateTime.now();
+    }
+
+    DateTime? parseOptionalDate(dynamic v) {
+      if (v == null || v.toString().isEmpty) return null;
+      try {
+        return DateTime.parse(v.toString());
+      } catch (_) {
+        return null;
+      }
     }
 
     return SupplierModel(
@@ -76,6 +89,8 @@ class SupplierModel {
           ? json['productCount']
           : int.tryParse(json['productCount'].toString()) ?? 0,
       createdAt: parsedDate,
+      subscriptionStart: parseOptionalDate(json['subscriptionStart']),
+      subscriptionEnd: parseOptionalDate(json['subscriptionEnd']),
     );
   }
 
@@ -137,6 +152,40 @@ class _SuppliersPageState extends State<SuppliersPage> {
     });
   }
 
+  Widget _datePickerField({
+    required BuildContext context,
+    required String label,
+    required DateTime? selectedDate,
+    required ValueChanged<DateTime> onPicked,
+  }) {
+    return InkWell(
+      onTap: () async {
+        final picked = await showDatePicker(
+          context: context,
+          initialDate: selectedDate ?? DateTime.now(),
+          firstDate: DateTime(2020),
+          lastDate: DateTime(2040),
+        );
+        if (picked != null) onPicked(picked);
+      },
+      child: InputDecorator(
+        decoration: InputDecoration(
+          labelText: label,
+          border: const OutlineInputBorder(),
+          suffixIcon: const Icon(Icons.calendar_today),
+        ),
+        child: Text(
+          selectedDate != null
+              ? '${selectedDate.year}-${selectedDate.month.toString().padLeft(2, '0')}-${selectedDate.day.toString().padLeft(2, '0')}'
+              : 'Select date',
+          style: TextStyle(
+            color: selectedDate != null ? Colors.black : Colors.grey,
+          ),
+        ),
+      ),
+    );
+  }
+
   Future<void> pickLogo() async {
     final result = await FilePicker.platform.pickFiles(
       type: FileType.image,
@@ -171,9 +220,11 @@ class _SuppliersPageState extends State<SuppliersPage> {
     required String phone,
     required String location,
     required String bio,
+    String? subscriptionStart,
+    String? subscriptionEnd,
   }) async {
     try {
-      await ApiService.multipartRequest('POST', '/suppliers', {
+      final fields = {
         'firstName': firstName,
         'lastName': lastName,
         'shopName': shopName,
@@ -183,7 +234,10 @@ class _SuppliersPageState extends State<SuppliersPage> {
         'phone': phone,
         'location': location,
         'bio': bio,
-      }, _buildFiles());
+      };
+      if (subscriptionStart != null) fields['subscriptionStart'] = subscriptionStart;
+      if (subscriptionEnd != null) fields['subscriptionEnd'] = subscriptionEnd;
+      await ApiService.multipartRequest('POST', '/suppliers', fields, _buildFiles());
 
       ScaffoldMessenger.of(
         context,
@@ -208,9 +262,11 @@ class _SuppliersPageState extends State<SuppliersPage> {
     required String location,
     required String bio,
     required bool isActive,
+    String? subscriptionStart,
+    String? subscriptionEnd,
   }) async {
     try {
-      await ApiService.multipartRequest('PUT', '/suppliers/${supplier.id}', {
+      final fields = {
         'firstName': firstName,
         'lastName': lastName,
         'shopName': shopName,
@@ -220,7 +276,10 @@ class _SuppliersPageState extends State<SuppliersPage> {
         'location': location,
         'bio': bio,
         'isActive': isActive.toString(),
-      }, _buildFiles());
+      };
+      if (subscriptionStart != null) fields['subscriptionStart'] = subscriptionStart;
+      if (subscriptionEnd != null) fields['subscriptionEnd'] = subscriptionEnd;
+      await ApiService.multipartRequest('PUT', '/suppliers/${supplier.id}', fields, _buildFiles());
 
       ScaffoldMessenger.of(
         context,
@@ -314,6 +373,8 @@ class _SuppliersPageState extends State<SuppliersPage> {
     selectedLogo = null;
     String? selectedShopType;
     bool obscurePassword = false;
+    DateTime? subscriptionStartDate;
+    DateTime? subscriptionEndDate;
 
     showDialog(
       context: context,
@@ -480,6 +541,28 @@ class _SuppliersPageState extends State<SuppliersPage> {
                           border: OutlineInputBorder(),
                         ),
                       ),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _datePickerField(
+                              context: context,
+                              label: "Subscription Start",
+                              selectedDate: subscriptionStartDate,
+                              onPicked: (d) => setDialogState(() => subscriptionStartDate = d),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: _datePickerField(
+                              context: context,
+                              label: "Subscription End",
+                              selectedDate: subscriptionEndDate,
+                              onPicked: (d) => setDialogState(() => subscriptionEndDate = d),
+                            ),
+                          ),
+                        ],
+                      ),
                     ],
                   ),
                 ),
@@ -526,6 +609,8 @@ class _SuppliersPageState extends State<SuppliersPage> {
                       phone: phoneController.text,
                       location: locationController.text,
                       bio: bioController.text,
+                      subscriptionStart: subscriptionStartDate?.toIso8601String(),
+                      subscriptionEnd: subscriptionEndDate?.toIso8601String(),
                     );
                   },
                   child: const Text("Add"),
@@ -548,6 +633,8 @@ class _SuppliersPageState extends State<SuppliersPage> {
     final locationController = TextEditingController(text: supplier.location);
     final bioController = TextEditingController(text: supplier.bio);
     bool isActive = supplier.isActive;
+    DateTime? subscriptionStartDate = supplier.subscriptionStart;
+    DateTime? subscriptionEndDate = supplier.subscriptionEnd;
     selectedLogo = null;
 
     showDialog(
@@ -650,6 +737,28 @@ class _SuppliersPageState extends State<SuppliersPage> {
                         ),
                       ),
                       const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _datePickerField(
+                              context: context,
+                              label: "Subscription Start",
+                              selectedDate: subscriptionStartDate,
+                              onPicked: (d) => setDialogState(() => subscriptionStartDate = d),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: _datePickerField(
+                              context: context,
+                              label: "Subscription End",
+                              selectedDate: subscriptionEndDate,
+                              onPicked: (d) => setDialogState(() => subscriptionEndDate = d),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
                       SwitchListTile(
                         contentPadding: EdgeInsets.zero,
                         title: const Text("Shop active"),
@@ -685,6 +794,8 @@ class _SuppliersPageState extends State<SuppliersPage> {
                       location: locationController.text,
                       bio: bioController.text,
                       isActive: isActive,
+                      subscriptionStart: subscriptionStartDate?.toIso8601String(),
+                      subscriptionEnd: subscriptionEndDate?.toIso8601String(),
                     );
                   },
                   child: const Text("Save"),
@@ -823,6 +934,7 @@ class _SuppliersPageState extends State<SuppliersPage> {
                           DataColumn(label: Text("Contact")),
                           DataColumn(label: Text("Location")),
                           DataColumn(label: Text("Products")),
+                          DataColumn(label: Text("Subscription")),
                           DataColumn(label: Text("Status")),
                           DataColumn(label: Text("Actions")),
                         ],
@@ -898,6 +1010,33 @@ class _SuppliersPageState extends State<SuppliersPage> {
                               ),
                               DataCell(Text(supplier.location)),
                               DataCell(Text(supplier.productCount.toString())),
+                              DataCell(
+                                Builder(
+                                  builder: (_) {
+                                    final end = supplier.subscriptionEnd;
+                                    if (end == null) {
+                                      return const Text('—', style: TextStyle(color: Colors.grey));
+                                    }
+                                    final now = DateTime.now();
+                                    final expired = now.isAfter(end);
+                                    final daysLeft = end.difference(now).inDays;
+                                    final dateStr = '${end.year}-${end.month.toString().padLeft(2, '0')}-${end.day.toString().padLeft(2, '0')}';
+                                    final color = expired ? Colors.red : (daysLeft <= 30 ? Colors.orange : Colors.green);
+                                    final label = expired ? 'Expired ($dateStr)' : '$daysLeft days left';
+                                    return Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                      decoration: BoxDecoration(
+                                        color: color.withValues(alpha: 0.1),
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
+                                      child: Text(
+                                        label,
+                                        style: TextStyle(color: color, fontWeight: FontWeight.w600, fontSize: 12),
+                                      ),
+                                    );
+                                  },
+                                ),
+                              ),
                               DataCell(
                                 Container(
                                   padding: const EdgeInsets.symmetric(
