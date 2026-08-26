@@ -474,6 +474,81 @@ exports.recordPurchase = async (req, res) => {
   }
 };
 
+// ─────────────────────────────────────────────────────────────────────────────
+// STATS
+// ─────────────────────────────────────────────────────────────────────────────
+
+// GET /api/supplier-dashboard/stats?year=2026
+// Returns overview numbers + a month-by-month curve for the requested year
+// (defaults to the current year) so the supplier can see which month sold best.
+exports.getStats = async (req, res) => {
+  try {
+    const supplierId = req.user.supplierId;
+    const now = new Date();
+    const year = parseInt(req.query.year, 10) || now.getFullYear();
+
+    const [totalProducts, purchases] = await Promise.all([
+      Product.countDocuments({ supplier: supplierId, isActive: true }),
+      Purchase.find({ supplierId }),
+    ]);
+
+    const totalPurchases = purchases.length;
+    const totalIncome = purchases.reduce((sum, p) => sum + (p.price || 0), 0);
+
+    // Aggregate quantity/revenue per product name to find the best seller
+    const salesByProduct = {};
+    purchases.forEach((p) => {
+      const key = p.article || "Unknown";
+      if (!salesByProduct[key]) salesByProduct[key] = { qty: 0, revenue: 0 };
+      salesByProduct[key].qty += p.qte || 0;
+      salesByProduct[key].revenue += p.price || 0;
+    });
+
+    let mostSoldProduct = null;
+    let bestQty = -1;
+    Object.entries(salesByProduct).forEach(([name, s]) => {
+      if (s.qty > bestQty) {
+        bestQty = s.qty;
+        mostSoldProduct = { name, quantity: s.qty, revenue: s.revenue };
+      }
+    });
+
+    // Distinct years the supplier has purchases in (for a year picker on the frontend)
+    const yearsSet = new Set(purchases.map((p) => new Date(p.date).getFullYear()));
+    yearsSet.add(now.getFullYear());
+    const availableYears = Array.from(yearsSet).sort((a, b) => b - a);
+
+    // Month-by-month curve (purchase count + income) for the requested year
+    const monthlyStats = Array.from({ length: 12 }, (_, i) => ({
+      month: i + 1,
+      purchases: 0,
+      income: 0,
+    }));
+
+    purchases.forEach((p) => {
+      const d = new Date(p.date);
+      if (d.getFullYear() === year) {
+        monthlyStats[d.getMonth()].purchases += 1;
+        monthlyStats[d.getMonth()].income += p.price || 0;
+      }
+    });
+
+    res.json({
+      data: {
+        totalProducts,
+        totalPurchases,
+        totalIncome,
+        mostSoldProduct, // { name, quantity, revenue } or null if no sales yet
+        year,
+        availableYears,
+        monthlyStats, // [{ month: 1..12, purchases, income }]
+      },
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
 // GET /api/supplier-dashboard/me  — returns current supplier profile
 exports.getProfile = async (req, res) => {
   try {

@@ -4,6 +4,7 @@ import 'package:pfe_dash/pages/supplier/supplier_products_page.dart';
 import 'package:pfe_dash/pages/supplier/supplier_posts_page.dart';
 import 'package:pfe_dash/pages/supplier/supplier_blogs_page.dart';
 import 'package:pfe_dash/pages/supplier/supplier_purchases_page.dart';
+import 'package:pfe_dash/pages/supplier/supplier_stats_page.dart';
 import 'package:pfe_dash/services/api_service.dart';
 import 'package:pfe_dash/main.dart';
 
@@ -19,10 +20,11 @@ class _SupplierHomePageState extends State<SupplierHomePage> {
   int _selectedIndex = 0;
 
   final List<Widget> _pages = [
-    const SupplierProductsPage(),   // 0
-    const SupplierPostsPage(),      // 1
-    const SupplierBlogsPage(),      // 2
-    const SupplierPurchasesPage(),  // 3
+    const SupplierProductsPage(), // 0
+    const SupplierPostsPage(), // 1
+    const SupplierBlogsPage(), // 2
+    const SupplierPurchasesPage(), // 3
+    const SupplierStatsPage(), // 4
   ];
 
   @override
@@ -65,7 +67,11 @@ class _SupplierHomePageState extends State<SupplierHomePage> {
                 else
                   const Padding(
                     padding: EdgeInsets.all(16),
-                    child: Icon(Icons.storefront, color: Colors.black, size: 30),
+                    child: Icon(
+                      Icons.storefront,
+                      color: Colors.black,
+                      size: 30,
+                    ),
                   ),
 
                 _buildMenuItem(
@@ -96,10 +102,17 @@ class _SupplierHomePageState extends State<SupplierHomePage> {
                   _isSidebarExpanded,
                 ),
 
+                _buildMenuItem(
+                  4,
+                  const Icon(Icons.bar_chart, color: Colors.black),
+                  'Stats',
+                  _isSidebarExpanded,
+                ),
+
                 const Spacer(),
 
                 _buildMenuItem(
-                  4,
+                  5,
                   Image.asset('assets/images/logout.png', width: 24),
                   'Logout',
                   _isSidebarExpanded,
@@ -134,7 +147,7 @@ class _SupplierHomePageState extends State<SupplierHomePage> {
       selected: isSelected,
       selectedTileColor: Colors.blue.withValues(alpha: 0.1),
       onTap: () {
-        if (index == 4) {
+        if (index == 5) {
           _logout();
           return;
         }

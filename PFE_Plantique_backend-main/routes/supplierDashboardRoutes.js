@@ -29,6 +29,8 @@ const {
   // Purchases
   listPurchases,
   recordPurchase,
+  // Stats
+  getStats,
   // Profile
   getProfile,
 } = require("../controllers/supplierDashboardController");
@@ -64,5 +66,8 @@ router.get("/purchases", listPurchases);
 // so that user-side booking code can call it. The route below is a separate path.
 // For now, it's accessible to authenticated suppliers.
 router.post("/purchases/record", recordPurchase);
+
+// Stats (overview cards + yearly monthly curve)
+router.get("/stats", getStats);
 
 module.exports = router;
