@@ -212,10 +212,10 @@ class _SupplierPurchasesPageState extends State<SupplierPurchasesPage> {
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(12),
                     child: SingleChildScrollView(
-                      scrollDirection: Axis.vertical,
-                      child: SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        child: DataTable(
+                        scrollDirection: Axis.vertical,
+                        child: SingleChildScrollView(
+                            scrollDirection: Axis.horizontal,
+                            child: DataTable(
                           headingRowColor: WidgetStateProperty.all(
                             const Color.fromARGB(
                               186,
@@ -299,7 +299,7 @@ class _SupplierPurchasesPageState extends State<SupplierPurchasesPage> {
                                 DataCell(Text(dateStr)),
                                 DataCell(
                                   Text(
-                                    '\$${p.price.toStringAsFixed(2)}',
+                                    'dt ${p.price.toStringAsFixed(2)}',
                                     style: const TextStyle(
                                       fontWeight: FontWeight.w600,
                                       color: Colors.green,

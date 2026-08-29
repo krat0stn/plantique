@@ -413,7 +413,10 @@ class _SupplierBlogsPageState extends State<SupplierBlogsPage> {
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(12),
                     child: SingleChildScrollView(
-                      child: DataTable(
+                        scrollDirection: Axis.vertical,
+                        child: SingleChildScrollView(
+                            scrollDirection: Axis.horizontal,
+                            child: DataTable(
                         headingRowColor: WidgetStateProperty.all(
                           const Color.fromARGB(
                             186,
@@ -512,6 +515,7 @@ class _SupplierBlogsPageState extends State<SupplierBlogsPage> {
                             ],
                           );
                         }).toList(),
+                        ),
                       ),
                     ),
                   ),

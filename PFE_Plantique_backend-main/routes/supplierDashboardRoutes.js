@@ -9,6 +9,8 @@ const upload = multer({
 });
 
 const { verifyToken, isSupplier } = require("../middlewares/authMiddleware");
+const commentController = require("../controllers/commentController");
+const User = require("../models/User");
 
 const {
   // Products
@@ -43,6 +45,22 @@ router.use(verifyToken, isSupplier);
 // Profile
 router.get("/me", getProfile);
 
+// User search for @mentions
+router.get("/users/search", async (req, res) => {
+  try {
+    const q = (req.query.q || "").trim();
+    if (q.length < 1) return res.json({ data: [] });
+    const users = await User.find({
+      username: { $regex: q, $options: "i" },
+    })
+      .select("username picture")
+      .limit(10);
+    res.json({ data: users });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Products
 router.get("/products",        listProducts);
 router.post("/products/import", upload.single("file"), importProducts);
@@ -55,6 +73,11 @@ router.get("/posts",        listPosts);
 router.post("/posts",       upload.single("picture"), createPost);
 router.put("/posts/:id",    upload.single("picture"), updatePost);
 router.delete("/posts/:id", deletePost);
+
+// Post Comments (supplier can manage comments on their own posts)
+router.post("/posts/:id/comments",       commentController.create);
+router.get("/posts/:id/comments",        commentController.list);
+router.delete("/posts/:id/comments/:commentId", commentController.remove);
 
 // Blogs
 router.get("/blogs",        listBlogs);

@@ -13,7 +13,7 @@ const uploadImage = (buffer) =>
 // Helper: delete past events
 const cleanupPastEvents = async () => {
   try {
-    await Event.deleteMany({ eventDate: { $lt: new Date() } });
+    await Event.deleteMany({ endDate: { $lt: new Date() } });
   } catch (_) {}
 };
 
@@ -21,7 +21,7 @@ const cleanupPastEvents = async () => {
 exports.list = async (_req, res) => {
   try {
     await cleanupPastEvents();
-    const events = await Event.find().sort({ eventDate: -1 });
+    const events = await Event.find().sort({ endDate: -1 });
     res.json({ data: events });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -42,10 +42,10 @@ exports.getById = async (req, res) => {
 // POST /api/admin/events
 exports.create = async (req, res) => {
   try {
-    const { title, description, location, price, eventDate } = req.body;
+    const { title, description, location, price, startDate, endDate } = req.body;
 
-    if (!title || !eventDate) {
-      return res.status(400).json({ error: "title and eventDate are required" });
+    if (!title || !startDate || !endDate) {
+      return res.status(400).json({ error: "title, startDate, and endDate are required" });
     }
 
     let imageUrl, imagePublicId;
@@ -60,7 +60,8 @@ exports.create = async (req, res) => {
       description: description || "",
       location: location || "",
       price: Number(price) || 0,
-      eventDate: new Date(eventDate),
+      startDate: new Date(startDate),
+      endDate: new Date(endDate),
       imageUrl,
       imagePublicId,
     });
@@ -77,13 +78,14 @@ exports.update = async (req, res) => {
     const event = await Event.findById(req.params.id);
     if (!event) return res.status(404).json({ error: "Event not found" });
 
-    const { title, description, location, price, eventDate } = req.body;
+    const { title, description, location, price, startDate, endDate } = req.body;
 
     if (title       !== undefined) event.title       = title;
     if (description !== undefined) event.description = description;
     if (location    !== undefined) event.location    = location;
     if (price       !== undefined) event.price       = Number(price);
-    if (eventDate   !== undefined) event.eventDate   = new Date(eventDate);
+    if (startDate   !== undefined) event.startDate   = new Date(startDate);
+    if (endDate     !== undefined) event.endDate     = new Date(endDate);
 
     if (req.file) {
       if (event.imagePublicId) {

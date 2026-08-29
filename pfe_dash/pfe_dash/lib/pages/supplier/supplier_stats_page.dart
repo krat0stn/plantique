@@ -333,8 +333,8 @@ class _SupplierStatsPageState extends State<SupplierStatsPage> {
                           const SizedBox(width: 12),
                           _statCard(
                             'Total Income',
-                            '\$${totalIncome.toStringAsFixed(2)}',
-                            Icons.attach_money,
+                            'dt ${totalIncome.toStringAsFixed(2)}',
+                            Icons.account_balance_wallet,
                             Colors.green,
                           ),
                           const SizedBox(width: 12),

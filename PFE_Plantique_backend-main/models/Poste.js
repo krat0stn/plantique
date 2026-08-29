@@ -18,6 +18,8 @@ const posteSchema = new Schema(
     likesCount: { type: Number, default: 0 },
     savedCount: { type: Number, default: 0 },
     commentsCount: { type: Number, default: 0 },
+    // Mentions
+    mentions: [{ type: Schema.Types.ObjectId, ref: "User" }],
   },
   { timestamps: true }
 );

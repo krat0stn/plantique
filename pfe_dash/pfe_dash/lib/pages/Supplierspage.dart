@@ -912,10 +912,10 @@ class _SuppliersPageState extends State<SuppliersPage> {
                     borderRadius: BorderRadius.circular(15),
                   ),
                   child: SingleChildScrollView(
-                    scrollDirection: Axis.vertical,
-                    child: SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: DataTable(
+                      scrollDirection: Axis.vertical,
+                      child: SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          child: DataTable(
                         headingRowHeight: 60,
                         dataRowMinHeight: 70,
                         dataRowMaxHeight: 90,
@@ -1064,46 +1064,32 @@ class _SuppliersPageState extends State<SuppliersPage> {
                               DataCell(
                                 Row(
                                   children: [
-                                    ElevatedButton.icon(
+                                    IconButton(
                                       onPressed: () =>
                                           showEditSupplierDialog(supplier),
-                                      icon: const Icon(Icons.edit, size: 16),
-                                      label: const Text("Edit"),
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor: Colors.orange,
-                                        foregroundColor: Colors.white,
-                                      ),
+                                      icon: const Icon(Icons.edit),
+                                      color: Colors.orange,
+                                      tooltip: "Edit",
                                     ),
-                                    const SizedBox(width: 8),
-                                    ElevatedButton.icon(
+                                    IconButton(
                                       onPressed: () => toggleActive(supplier),
                                       icon: Icon(
                                         supplier.isActive
                                             ? Icons.block
                                             : Icons.check_circle,
-                                        size: 16,
                                       ),
-                                      label: Text(
-                                        supplier.isActive
-                                            ? "Suspend"
-                                            : "Activate",
-                                      ),
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor: supplier.isActive
-                                            ? Colors.grey.shade700
-                                            : Colors.teal,
-                                        foregroundColor: Colors.white,
-                                      ),
+                                      color: supplier.isActive
+                                          ? Colors.grey.shade700
+                                          : Colors.teal,
+                                      tooltip: supplier.isActive
+                                          ? "Suspend"
+                                          : "Activate",
                                     ),
-                                    const SizedBox(width: 8),
-                                    ElevatedButton.icon(
+                                    IconButton(
                                       onPressed: () => deleteSupplier(supplier),
-                                      icon: const Icon(Icons.delete, size: 16),
-                                      label: const Text("Delete"),
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor: Colors.red,
-                                        foregroundColor: Colors.white,
-                                      ),
+                                      icon: const Icon(Icons.delete),
+                                      color: Colors.red,
+                                      tooltip: "Delete",
                                     ),
                                   ],
                                 ),

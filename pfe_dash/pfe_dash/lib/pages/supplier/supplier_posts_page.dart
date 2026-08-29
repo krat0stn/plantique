@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:pfe_dash/services/api_service.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:http/http.dart' as http;
+import 'mention_widgets.dart';
 
 const _kStatusColors = {
   'pending': Color(0xFFFFF3CD),
@@ -19,6 +20,9 @@ class SupplierPostModel {
   final String content;
   final String picture;
   final String status;
+  final int likesCount;
+  final int commentsCount;
+  final int savedCount;
   final DateTime createdAt;
 
   SupplierPostModel({
@@ -26,6 +30,9 @@ class SupplierPostModel {
     required this.content,
     required this.picture,
     required this.status,
+    this.likesCount = 0,
+    this.commentsCount = 0,
+    this.savedCount = 0,
     required this.createdAt,
   });
 
@@ -41,7 +48,52 @@ class SupplierPostModel {
       content: json['content']?.toString() ?? '',
       picture: json['picture']?.toString() ?? '',
       status: json['status']?.toString() ?? 'pending',
+      likesCount: (json['likesCount'] as num?)?.toInt() ?? 0,
+      commentsCount: (json['commentsCount'] as num?)?.toInt() ?? 0,
+      savedCount: (json['savedCount'] as num?)?.toInt() ?? 0,
       createdAt: parsedDate,
+    );
+  }
+}
+
+class PostComment {
+  final String id;
+  final String content;
+  final String authorName;
+  final String authorPicture;
+  final String? parentId;
+  final DateTime createdAt;
+  final List<PostComment> replies;
+
+  PostComment({
+    required this.id,
+    required this.content,
+    required this.authorName,
+    required this.authorPicture,
+    this.parentId,
+    required this.createdAt,
+    this.replies = const [],
+  });
+
+  factory PostComment.fromJson(Map<String, dynamic> json) {
+    DateTime parsedDate;
+    try {
+      parsedDate = DateTime.parse(json['createdAt']?.toString() ?? '');
+    } catch (_) {
+      parsedDate = DateTime.now();
+    }
+    final rawReplies = json['replies'];
+    final repliesList = rawReplies is List
+        ? rawReplies.map((r) => PostComment.fromJson(r)).toList()
+        : <PostComment>[];
+    return PostComment(
+      id: json['_id']?.toString() ?? '',
+      content: json['content']?.toString() ?? '',
+      authorName: json['authorName']?.toString() ?? 'Unknown',
+      authorPicture: json['authorPicture']?.toString() ?? '',
+      parentId: json['parentId']?.toString(),
+      createdAt: parsedDate,
+      replies: repliesList,
     );
   }
 }
@@ -182,6 +234,516 @@ class _SupplierPostsPageState extends State<SupplierPostsPage> {
     }
   }
 
+  void _showCommentsDialog(SupplierPostModel post) async {
+    List<PostComment> comments = [];
+    bool loadingComments = true;
+    String? commentError;
+
+    try {
+      final data = await ApiService.get(
+        '/supplier-dashboard/posts/${post.id}/comments',
+      );
+      final List<dynamic> list = data['data'] ?? [];
+      comments = list.map((c) => PostComment.fromJson(c)).toList();
+      loadingComments = false;
+    } catch (e) {
+      commentError = 'Failed to load comments: $e';
+      loadingComments = false;
+    }
+
+    if (!mounted) return;
+
+    final commentCtrl = TextEditingController();
+    String? replyingToId;
+    String? replyingToName;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) {
+          Future<void> refreshComments() async {
+            try {
+              final data = await ApiService.get(
+                '/supplier-dashboard/posts/${post.id}/comments',
+              );
+              final List<dynamic> list = data['data'] ?? [];
+              setDialogState(() {
+                comments =
+                    list.map((c) => PostComment.fromJson(c)).toList();
+              });
+            } catch (_) {}
+          }
+
+          Future<void> refreshPostAndComments() async {
+            await refreshComments();
+            await loadPosts();
+          }
+
+          Future<void> addComment() async {
+            final text = commentCtrl.text.trim();
+            if (text.isEmpty) return;
+            try {
+              await ApiService.post(
+                '/supplier-dashboard/posts/${post.id}/comments',
+                {'content': text},
+              );
+              commentCtrl.clear();
+              replyingToId = null;
+              replyingToName = null;
+              await refreshPostAndComments();
+            } catch (e) {
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Error: $e')),
+                );
+              }
+            }
+          }
+
+          Future<void> replyToComment(
+              String parentId, String parentName) async {
+            final text = commentCtrl.text.trim();
+            if (text.isEmpty) return;
+            try {
+              await ApiService.post(
+                '/supplier-dashboard/posts/${post.id}/comments',
+                {'content': text, 'parentId': parentId},
+              );
+              commentCtrl.clear();
+              replyingToId = null;
+              replyingToName = null;
+              await refreshPostAndComments();
+            } catch (e) {
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Error: $e')),
+                );
+              }
+            }
+          }
+
+          Future<void> deleteComment(String commentId) async {
+            final confirm = await showDialog<bool>(
+              context: context,
+              builder: (dCtx) => AlertDialog(
+                title: const Text('Delete comment?'),
+                content: const Text('This will also delete all replies to this comment.'),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(dCtx, false),
+                    child: const Text('Cancel'),
+                  ),
+                  ElevatedButton(
+                    onPressed: () => Navigator.pop(dCtx, true),
+                    style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.red),
+                    child: const Text('Delete',
+                        style: TextStyle(color: Colors.white)),
+                  ),
+                ],
+              ),
+            );
+            if (confirm != true) return;
+            try {
+              await ApiService.delete(
+                '/supplier-dashboard/posts/${post.id}/comments/$commentId',
+              );
+              await refreshPostAndComments();
+            } catch (e) {
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Error: $e')),
+                );
+              }
+            }
+          }
+
+          Widget buildCommentTile(PostComment c, {bool isReply = false}) {
+            return Container(
+              margin: EdgeInsets.only(
+                left: isReply ? 32 : 0,
+                top: 2,
+                bottom: 2,
+              ),
+              decoration: isReply
+                  ? BoxDecoration(
+                      border: Border(
+                        left: BorderSide(
+                          color: Colors.green.shade300,
+                          width: 2,
+                        ),
+                      ),
+                    )
+                  : null,
+              padding: const EdgeInsets.only(left: 10),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 8, vertical: 4),
+                    child: Row(
+                      children: [
+                        CircleAvatar(
+                          radius: isReply ? 12 : 14,
+                          backgroundColor: isReply
+                              ? Colors.green.shade50
+                              : Colors.green.shade100,
+                          child: c.authorPicture.isNotEmpty
+                              ? ClipOval(
+                                  child: Image.network(
+                                    c.authorPicture,
+                                    width: isReply ? 24 : 28,
+                                    height: isReply ? 24 : 28,
+                                    fit: BoxFit.cover,
+                                    errorBuilder: (_, __, ___) => Text(
+                                      c.authorName.isNotEmpty
+                                          ? c.authorName[0].toUpperCase()
+                                          : '?',
+                                      style: TextStyle(
+                                          fontSize: isReply ? 10 : 12),
+                                    ),
+                                  ),
+                                )
+                              : Text(
+                                  c.authorName.isNotEmpty
+                                      ? c.authorName[0].toUpperCase()
+                                      : '?',
+                                  style: TextStyle(
+                                      fontSize: isReply ? 10 : 12),
+                                ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                c.authorName,
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: isReply ? 11 : 13,
+                                ),
+                              ),
+                              Text(
+                                '${c.createdAt.day}/${c.createdAt.month}/${c.createdAt.year}',
+                                style: const TextStyle(
+                                    fontSize: 9, color: Colors.grey),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.only(left: 38, bottom: 2),
+                    child: buildHighlightedText(
+                      c.content,
+                      fontSize: isReply ? 12 : 13,
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.only(left: 38, bottom: 4),
+                    child: Row(
+                      children: [
+                        TextButton.icon(
+                          onPressed: () {
+                            setDialogState(() {
+                              replyingToId = c.id;
+                              replyingToName = c.authorName;
+                            });
+                          },
+                          icon: const Icon(Icons.reply, size: 13),
+                          label: const Text('Reply',
+                              style: TextStyle(fontSize: 11)),
+                          style: TextButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 6, vertical: 2),
+                            minimumSize: Size.zero,
+                          ),
+                        ),
+                        TextButton.icon(
+                          onPressed: () => deleteComment(c.id),
+                          icon: const Icon(Icons.delete_outline,
+                              size: 13, color: Colors.red),
+                          label: const Text('Delete',
+                              style: TextStyle(
+                                  fontSize: 11, color: Colors.red)),
+                          style: TextButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 6, vertical: 2),
+                            minimumSize: Size.zero,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  // Nested replies
+                  if (c.replies.isNotEmpty)
+                    ...c.replies.map((r) => buildCommentTile(r, isReply: true)),
+                ],
+              ),
+            );
+          }
+
+          return AlertDialog(
+            title: Text('Comments (${post.commentsCount})'),
+            content: SizedBox(
+              width: 550,
+              height: 500,
+              child: Column(
+                children: [
+                  // Comment input area
+                  if (post.status == 'approved') ...[
+                    if (replyingToId != null)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 6),
+                        margin: const EdgeInsets.only(bottom: 8),
+                        decoration: BoxDecoration(
+                          color: Colors.blue.shade50,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(Icons.reply,
+                                size: 16, color: Colors.blue.shade700),
+                            const SizedBox(width: 6),
+                            Expanded(
+                              child: Text(
+                                'Replying to $replyingToName',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.blue.shade700,
+                                ),
+                              ),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.close, size: 16),
+                              onPressed: () {
+                                setDialogState(() {
+                                  replyingToId = null;
+                                  replyingToName = null;
+                                });
+                              },
+                            ),
+                          ],
+                        ),
+                      ),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: MentionTextField(
+                            controller: commentCtrl,
+                            hintText: replyingToId != null
+                                ? 'Write a reply... (use @ to mention)'
+                                : 'Write a comment... (use @ to mention)',
+                            decoration: InputDecoration(
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 12, vertical: 10),
+                            ),
+                            onSubmitted: (_) {
+                              if (replyingToId != null) {
+                                replyToComment(
+                                    replyingToId!, replyingToName!);
+                              } else {
+                                addComment();
+                              }
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        IconButton(
+                          onPressed: () {
+                            if (replyingToId != null) {
+                              replyToComment(
+                                  replyingToId!, replyingToName!);
+                            } else {
+                              addComment();
+                            }
+                          },
+                          icon: const Icon(Icons.send, color: Colors.green),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    Divider(color: Colors.grey.shade300),
+                    const SizedBox(height: 6),
+                  ] else ...[
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      margin: const EdgeInsets.only(bottom: 10),
+                      decoration: BoxDecoration(
+                        color: Colors.amber.shade50,
+                        border: Border.all(color: Colors.amber.shade300),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Row(
+                        children: [
+                          Icon(Icons.info_outline,
+                              color: Colors.amber, size: 18),
+                          SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Comments are only available for approved posts.',
+                              style: TextStyle(
+                                  fontSize: 12, color: Colors.brown),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                  // Comments list
+                  Expanded(
+                    child: loadingComments
+                        ? const Center(child: CircularProgressIndicator())
+                        : commentError != null
+                            ? Center(
+                                child: Column(
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.center,
+                                  children: [
+                                    Text(commentError,
+                                        style: const TextStyle(
+                                            color: Colors.red)),
+                                    const SizedBox(height: 8),
+                                    ElevatedButton(
+                                      onPressed: refreshPostAndComments,
+                                      child: const Text('Retry'),
+                                    ),
+                                  ],
+                                ),
+                              )
+                            : comments.isEmpty
+                                ? const Center(
+                                    child: Text(
+                                      'No comments yet.',
+                                      style: TextStyle(
+                                          color: Colors.grey),
+                                    ),
+                                  )
+                                : ListView.separated(
+                                    itemCount: comments.length,
+                                    separatorBuilder: (_, __) =>
+                                        Divider(
+                                            height: 1,
+                                            color:
+                                                Colors.grey.shade200),
+                                    itemBuilder: (ctx, i) {
+                                      return buildCommentTile(
+                                          comments[i]);
+                                    },
+                                  ),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Close'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  void _showLikesDialog(SupplierPostModel post) async {
+    List<Map<String, dynamic>> likes = [];
+    bool loadingLikes = true;
+
+    try {
+      final data = await ApiService.get('/postes/${post.id}/likes');
+      final List<dynamic> list = data['data'] ?? [];
+      likes = list.cast<Map<String, dynamic>>();
+      loadingLikes = false;
+    } catch (e) {
+      loadingLikes = false;
+    }
+
+    if (!mounted) return;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Likes (${post.likesCount})'),
+        content: SizedBox(
+          width: 400,
+          height: 350,
+          child: loadingLikes
+              ? const Center(child: CircularProgressIndicator())
+              : likes.isEmpty
+                  ? const Center(
+                      child: Text('No likes yet.',
+                          style: TextStyle(color: Colors.grey)),
+                    )
+                  : ListView.separated(
+                      itemCount: likes.length,
+                      separatorBuilder: (_, __) => const Divider(height: 1),
+                      itemBuilder: (ctx, i) {
+                        final like = likes[i];
+                        final user = like['userId'] is Map
+                            ? like['userId']
+                            : {};
+                        final username =
+                            user['username']?.toString() ?? 'Unknown';
+                        final picture =
+                            user['picture']?.toString() ?? '';
+                        return ListTile(
+                          contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 4),
+                          leading: CircleAvatar(
+                            radius: 18,
+                            backgroundColor: Colors.red.shade50,
+                            child: picture.isNotEmpty
+                                ? ClipOval(
+                                    child: Image.network(
+                                      picture,
+                                      width: 36,
+                                      height: 36,
+                                      fit: BoxFit.cover,
+                                      errorBuilder: (_, __, ___) => Text(
+                                        username.isNotEmpty
+                                            ? username[0].toUpperCase()
+                                            : '?',
+                                        style:
+                                            const TextStyle(fontSize: 14),
+                                      ),
+                                    ),
+                                  )
+                                : Text(
+                                    username.isNotEmpty
+                                        ? username[0].toUpperCase()
+                                        : '?',
+                                    style: const TextStyle(fontSize: 14),
+                                  ),
+                          ),
+                          title: Text(
+                            username,
+                            style: const TextStyle(
+                                fontWeight: FontWeight.bold, fontSize: 13),
+                          ),
+                        );
+                      },
+                    ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _showPostDialog({SupplierPostModel? post}) {
     final contentCtrl = TextEditingController(text: post?.content ?? '');
     selectedImage = null;
@@ -241,11 +803,12 @@ class _SupplierPostsPageState extends State<SupplierPostsPage> {
                     ),
                   ),
                   const SizedBox(height: 14),
-                  TextField(
+                  MentionTextField(
                     controller: contentCtrl,
                     maxLines: 5,
                     decoration: const InputDecoration(
                       labelText: 'Content *',
+                      hintText: 'Write your post... (use @ to mention users)',
                       border: OutlineInputBorder(),
                     ),
                   ),
@@ -373,7 +936,10 @@ class _SupplierPostsPageState extends State<SupplierPostsPage> {
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(12),
                     child: SingleChildScrollView(
-                      child: DataTable(
+                        scrollDirection: Axis.vertical,
+                        child: SingleChildScrollView(
+                            scrollDirection: Axis.horizontal,
+                            child: DataTable(
                         headingRowColor: WidgetStateProperty.all(
                           const Color.fromARGB(
                             186,
@@ -397,6 +963,18 @@ class _SupplierPostsPageState extends State<SupplierPostsPage> {
                           ),
                           DataColumn(
                             label: Text(
+                              'Likes',
+                              style: TextStyle(fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                          DataColumn(
+                            label: Text(
+                              'Comments',
+                              style: TextStyle(fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                          DataColumn(
+                            label: Text(
                               'Date',
                               style: TextStyle(fontWeight: FontWeight.bold),
                             ),
@@ -415,9 +993,72 @@ class _SupplierPostsPageState extends State<SupplierPostsPage> {
                           return DataRow(
                             cells: [
                               DataCell(
-                                SizedBox(width: 300, child: Text(preview)),
+                                SizedBox(
+                                  width: 300,
+                                  child: buildHighlightedText(
+                                    preview,
+                                    fontSize: 13,
+                                  ),
+                                ),
                               ),
                               DataCell(_statusBadge(p.status)),
+                              DataCell(
+                                InkWell(
+                                  onTap: p.likesCount > 0
+                                      ? () => _showLikesDialog(p)
+                                      : null,
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(Icons.favorite,
+                                          size: 16,
+                                          color: p.likesCount > 0
+                                              ? Colors.red
+                                              : Colors.grey),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        '${p.likesCount}',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          color: p.likesCount > 0
+                                              ? Colors.red
+                                              : Colors.grey,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                              DataCell(
+                                InkWell(
+                                  onTap: () => _showCommentsDialog(p),
+                                  child: Tooltip(
+                                    message: p.status != 'approved'
+                                        ? 'Post must be approved to add comments'
+                                        : 'View & manage comments',
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(Icons.comment,
+                                            size: 16,
+                                            color: p.commentsCount > 0
+                                                ? Colors.blue
+                                                : Colors.grey),
+                                        const SizedBox(width: 4),
+                                        Text(
+                                          '${p.commentsCount}',
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            color: p.commentsCount > 0
+                                                ? Colors.blue
+                                                : Colors.grey,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
                               DataCell(
                                 Text(
                                   '${p.createdAt.year}-${p.createdAt.month.toString().padLeft(2, '0')}-${p.createdAt.day.toString().padLeft(2, '0')}',
@@ -432,7 +1073,8 @@ class _SupplierPostsPageState extends State<SupplierPostsPage> {
                                         color: Colors.blue,
                                       ),
                                       tooltip: 'Edit',
-                                      onPressed: () => _showPostDialog(post: p),
+                                      onPressed: () =>
+                                          _showPostDialog(post: p),
                                     ),
                                     IconButton(
                                       icon: const Icon(
@@ -448,6 +1090,7 @@ class _SupplierPostsPageState extends State<SupplierPostsPage> {
                             ],
                           );
                         }).toList(),
+                        ),
                       ),
                     ),
                   ),

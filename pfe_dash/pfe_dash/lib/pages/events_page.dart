@@ -9,7 +9,8 @@ class EventModel {
   final String description;
   final String location;
   final double price;
-  final DateTime eventDate;
+  final DateTime startDate;
+  final DateTime endDate;
   final String imageUrl;
 
   EventModel({
@@ -18,16 +19,24 @@ class EventModel {
     required this.description,
     required this.location,
     required this.price,
-    required this.eventDate,
+    required this.startDate,
+    required this.endDate,
     required this.imageUrl,
   });
 
   factory EventModel.fromJson(Map<String, dynamic> json) {
-    DateTime parsedDate;
+    DateTime parsedStartDate;
     try {
-      parsedDate = DateTime.parse(json['eventDate']?.toString() ?? '');
+      parsedStartDate = DateTime.parse(json['startDate']?.toString() ?? '');
     } catch (_) {
-      parsedDate = DateTime.now();
+      parsedStartDate = DateTime.now();
+    }
+
+    DateTime parsedEndDate;
+    try {
+      parsedEndDate = DateTime.parse(json['endDate']?.toString() ?? '');
+    } catch (_) {
+      parsedEndDate = DateTime.now();
     }
 
     return EventModel(
@@ -38,7 +47,8 @@ class EventModel {
       price: (json['price'] is num)
           ? (json['price'] as num).toDouble()
           : double.tryParse(json['price'].toString()) ?? 0.0,
-      eventDate: parsedDate,
+      startDate: parsedStartDate,
+      endDate: parsedEndDate,
       imageUrl: json['imageUrl']?.toString() ?? '',
     );
   }
@@ -105,7 +115,8 @@ class _EventsPageState extends State<EventsPage> {
     required String description,
     required String location,
     required String price,
-    required String eventDate,
+    required String startDate,
+    required String endDate,
   }) async {
     try {
       await ApiService.multipartRequest(
@@ -116,7 +127,8 @@ class _EventsPageState extends State<EventsPage> {
           'description': description,
           'location': location,
           'price': price,
-          'eventDate': eventDate,
+          'startDate': startDate,
+          'endDate': endDate,
         },
         _buildFiles(),
       );
@@ -142,7 +154,8 @@ class _EventsPageState extends State<EventsPage> {
     required String description,
     required String location,
     required String price,
-    required String eventDate,
+    required String startDate,
+    required String endDate,
   }) async {
     try {
       await ApiService.multipartRequest(
@@ -153,7 +166,8 @@ class _EventsPageState extends State<EventsPage> {
           'description': description,
           'location': location,
           'price': price,
-          'eventDate': eventDate,
+          'startDate': startDate,
+          'endDate': endDate,
         },
         _buildFiles(),
       );
@@ -217,7 +231,8 @@ class _EventsPageState extends State<EventsPage> {
     final priceCtrl = TextEditingController(
       text: event?.price.toString() ?? '0',
     );
-    DateTime? selectedDate = event?.eventDate;
+    DateTime? selectedStartDate = event?.startDate;
+    DateTime? selectedEndDate = event?.endDate;
     selectedImage = null;
 
     showDialog(
@@ -261,27 +276,58 @@ class _EventsPageState extends State<EventsPage> {
                       final picked = await showDatePicker(
                         context: context,
                         initialDate:
-                            selectedDate ?? DateTime.now().add(const Duration(days: 1)),
+                            selectedStartDate ?? DateTime.now().add(const Duration(days: 1)),
                         firstDate: DateTime.now(),
                         lastDate: DateTime(2040),
                       );
                       if (picked != null) {
-                        setDialogState(() => selectedDate = picked);
+                        setDialogState(() => selectedStartDate = picked);
                       }
                     },
                     child: InputDecorator(
                       decoration: const InputDecoration(
-                        labelText: 'Event Date *',
+                        labelText: 'Start Date *',
                         border: OutlineInputBorder(),
                         suffixIcon: Icon(Icons.calendar_today),
                       ),
                       child: Text(
-                        selectedDate != null
-                            ? '${selectedDate!.year}-${selectedDate!.month.toString().padLeft(2, '0')}-${selectedDate!.day.toString().padLeft(2, '0')}'
-                            : 'Select date',
+                        selectedStartDate != null
+                            ? '${selectedStartDate!.year}-${selectedStartDate!.month.toString().padLeft(2, '0')}-${selectedStartDate!.day.toString().padLeft(2, '0')}'
+                            : 'Select start date',
                         style: TextStyle(
                           color:
-                              selectedDate != null ? Colors.black : Colors.grey,
+                              selectedStartDate != null ? Colors.black : Colors.grey,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  InkWell(
+                    onTap: () async {
+                      final picked = await showDatePicker(
+                        context: context,
+                        initialDate:
+                            selectedEndDate ?? DateTime.now().add(const Duration(days: 2)),
+                        firstDate: DateTime.now(),
+                        lastDate: DateTime(2040),
+                      );
+                      if (picked != null) {
+                        setDialogState(() => selectedEndDate = picked);
+                      }
+                    },
+                    child: InputDecorator(
+                      decoration: const InputDecoration(
+                        labelText: 'End Date *',
+                        border: OutlineInputBorder(),
+                        suffixIcon: Icon(Icons.calendar_today),
+                      ),
+                      child: Text(
+                        selectedEndDate != null
+                            ? '${selectedEndDate!.year}-${selectedEndDate!.month.toString().padLeft(2, '0')}-${selectedEndDate!.day.toString().padLeft(2, '0')}'
+                            : 'Select end date',
+                        style: TextStyle(
+                          color:
+                              selectedEndDate != null ? Colors.black : Colors.grey,
                         ),
                       ),
                     ),
@@ -303,21 +349,29 @@ class _EventsPageState extends State<EventsPage> {
                   );
                   return;
                 }
-                if (selectedDate == null) {
+                if (selectedStartDate == null) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Event date is required')),
+                    const SnackBar(content: Text('Start date is required')),
+                  );
+                  return;
+                }
+                if (selectedEndDate == null) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('End date is required')),
                   );
                   return;
                 }
                 Navigator.pop(ctx);
-                final dateStr = selectedDate!.toIso8601String();
+                final startDateStr = selectedStartDate!.toIso8601String();
+                final endDateStr = selectedEndDate!.toIso8601String();
                 if (event == null) {
                   await createEvent(
                     title: titleCtrl.text.trim(),
                     description: descriptionCtrl.text.trim(),
                     location: locationCtrl.text.trim(),
                     price: priceCtrl.text.trim(),
-                    eventDate: dateStr,
+                    startDate: startDateStr,
+                    endDate: endDateStr,
                   );
                 } else {
                   await updateEvent(
@@ -326,7 +380,8 @@ class _EventsPageState extends State<EventsPage> {
                     description: descriptionCtrl.text.trim(),
                     location: locationCtrl.text.trim(),
                     price: priceCtrl.text.trim(),
-                    eventDate: dateStr,
+                    startDate: startDateStr,
+                    endDate: endDateStr,
                   );
                 }
               },
@@ -424,10 +479,10 @@ class _EventsPageState extends State<EventsPage> {
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(12),
                     child: SingleChildScrollView(
-                      scrollDirection: Axis.vertical,
-                      child: SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        child: DataTable(
+                        scrollDirection: Axis.vertical,
+                        child: SingleChildScrollView(
+                            scrollDirection: Axis.horizontal,
+                            child: DataTable(
                           headingRowColor: WidgetStateProperty.all(
                             const Color.fromARGB(186, 234, 143, 143)
                                 .withValues(alpha: 0.3),
@@ -453,7 +508,13 @@ class _EventsPageState extends State<EventsPage> {
                             ),
                             DataColumn(
                               label: Text(
-                                'Event Date',
+                                'Start Date',
+                                style: TextStyle(fontWeight: FontWeight.bold),
+                              ),
+                            ),
+                            DataColumn(
+                              label: Text(
+                                'End Date',
                                 style: TextStyle(fontWeight: FontWeight.bold),
                               ),
                             ),
@@ -465,8 +526,10 @@ class _EventsPageState extends State<EventsPage> {
                             ),
                           ],
                           rows: events.map((e) {
-                            final dateStr =
-                                '${e.eventDate.year}-${e.eventDate.month.toString().padLeft(2, '0')}-${e.eventDate.day.toString().padLeft(2, '0')}';
+                            final startDateStr =
+                                '${e.startDate.year}-${e.startDate.month.toString().padLeft(2, '0')}-${e.startDate.day.toString().padLeft(2, '0')}';
+                            final endDateStr =
+                                '${e.endDate.year}-${e.endDate.month.toString().padLeft(2, '0')}-${e.endDate.day.toString().padLeft(2, '0')}';
                             return DataRow(
                               cells: [
                                 DataCell(
@@ -480,7 +543,7 @@ class _EventsPageState extends State<EventsPage> {
                                 DataCell(Text(e.location.isEmpty ? '—' : e.location)),
                                 DataCell(
                                   Text(
-                                    '\$${e.price.toStringAsFixed(2)}',
+                                    'dt ${e.price.toStringAsFixed(2)}',
                                     style: const TextStyle(
                                       fontWeight: FontWeight.w600,
                                       color: Colors.green,
@@ -488,7 +551,10 @@ class _EventsPageState extends State<EventsPage> {
                                   ),
                                 ),
                                 DataCell(
-                                  Text(dateStr),
+                                  Text(startDateStr),
+                                ),
+                                DataCell(
+                                  Text(endDateStr),
                                 ),
                                 DataCell(
                                   Row(

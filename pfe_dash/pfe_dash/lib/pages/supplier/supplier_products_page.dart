@@ -372,8 +372,10 @@ class _SupplierProductsPageState extends State<SupplierProductsPage> {
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(12),
                     child: SingleChildScrollView(
-                      scrollDirection: Axis.vertical,
-                      child: DataTable(
+                        scrollDirection: Axis.vertical,
+                        child: SingleChildScrollView(
+                            scrollDirection: Axis.horizontal,
+                            child: DataTable(
                         headingRowColor: WidgetStateProperty.all(
                           const Color.fromARGB(186, 234, 143, 143).withValues(alpha: 0.3)),
                         columns: const [
@@ -388,7 +390,7 @@ class _SupplierProductsPageState extends State<SupplierProductsPage> {
                           return DataRow(cells: [
                             DataCell(Text(p.name, style: const TextStyle(fontWeight: FontWeight.w500))),
                             DataCell(Text(p.category)),
-                            DataCell(Text('\$${p.price.toStringAsFixed(2)}')),
+                            DataCell(Text('dt ${p.price.toStringAsFixed(2)}')),
                             DataCell(Text(p.quantity.toString())),
                             DataCell(Container(
                               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
@@ -417,6 +419,7 @@ class _SupplierProductsPageState extends State<SupplierProductsPage> {
                             ])),
                           ]);
                         }).toList(),
+                        ),
                       ),
                     ),
                   ),

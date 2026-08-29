@@ -361,10 +361,10 @@ class _PostsPageState extends State<PostsPage> {
                     borderRadius: BorderRadius.circular(15),
                   ),
                   child: SingleChildScrollView(
-                    scrollDirection: Axis.vertical,
-                    child: SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: DataTable(
+                      scrollDirection: Axis.vertical,
+                      child: SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          child: DataTable(
                         headingRowHeight: 60,
                         dataRowMinHeight: 80,
                         dataRowMaxHeight: 100,

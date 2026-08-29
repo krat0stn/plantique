@@ -1241,10 +1241,10 @@ class _PlantsPageState extends State<PlantsPage> {
                     borderRadius: BorderRadius.circular(15),
                   ),
                   child: SingleChildScrollView(
-                    scrollDirection: Axis.vertical,
-                    child: SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: DataTable(
+                      scrollDirection: Axis.vertical,
+                      child: SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          child: DataTable(
                         headingRowHeight: 60,
                         dataRowHeight: 80,
                         columnSpacing: 35,

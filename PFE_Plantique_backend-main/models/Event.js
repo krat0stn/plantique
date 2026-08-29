@@ -7,7 +7,8 @@ const EventSchema = new Schema(
     description: { type: String, default: "" },
     location:    { type: String, default: "", trim: true },
     price:       { type: Number, default: 0 },
-    eventDate:   { type: Date, required: true },
+    startDate:   { type: Date, required: true },
+    endDate:     { type: Date, required: true },
     imageUrl:    { type: String, trim: true },
     imagePublicId: { type: String, trim: true },
     isActive:    { type: Boolean, default: true },
@@ -15,6 +16,6 @@ const EventSchema = new Schema(
   { timestamps: true }
 );
 
-EventSchema.index({ eventDate: -1 });
+EventSchema.index({ endDate: -1 });
 
 module.exports = mongoose.model("Event", EventSchema);

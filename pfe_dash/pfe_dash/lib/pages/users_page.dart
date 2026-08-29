@@ -262,10 +262,10 @@ class _UsersPageState extends State<UsersPage> {
                     borderRadius: BorderRadius.circular(15),
                   ),
                   child: SingleChildScrollView(
-                    scrollDirection: Axis.vertical,
-                    child: SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: DataTable(
+                      scrollDirection: Axis.vertical,
+                      child: SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          child: DataTable(
                         headingRowHeight: 60,
                         dataRowHeight: 70,
                         columnSpacing: 40,

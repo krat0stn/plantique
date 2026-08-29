@@ -102,6 +102,19 @@ class ApiService {
 
   // ── Multipart ─────────────────────────────────────────────────────────────────
 
+  // ── User Search ─────────────────────────────────────────────────────────────
+
+  static Future<List<Map<String, dynamic>>> searchUsers(String query) async {
+    if (query.trim().isEmpty) return [];
+    final response = await http.get(
+      Uri.parse('$baseUrl/supplier-dashboard/users/search?q=${Uri.encodeComponent(query)}'),
+      headers: _headers(),
+    );
+    final data = _handleResponse(response);
+    final list = data['data'] as List<dynamic>? ?? [];
+    return list.cast<Map<String, dynamic>>();
+  }
+
   static Future<dynamic> postWithFile(
     String endpoint,
     Map<String, String> fields,

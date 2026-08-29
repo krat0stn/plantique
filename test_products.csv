@@ -1,0 +1,11 @@
+name,category,price,quantity,description,inStock
+Monstera Deliciosa,Indoor Plants,35.99,25,Large tropical plant with split leaves,true
+Snake Plant,Indoor Plants,22.50,40,Low maintenance air purifier,true
+Succulent Mix,Small Plants,12.00,60,Assorted succulent set of 4,true
+Fiddle Leaf Fig,Indoor Plants,49.99,15,Statement plant with large leaves,true
+Rose Bush,Outdoor Plants,18.75,30,Classic red roses,true
+Lavender,Outdoor Plants,9.99,50,Fragrant purple flowers,true
+Herb Garden Kit,Growing Kits,24.00,35,Basil parsley and mint seeds,true
+Ceramic Pot - White,Pots & Planters,15.50,45,Minimalist white ceramic pot,false
+Watering Can - Green,Accessories,11.99,55,Eco-friendly plastic watering can,true
+Plant Food Fertilizer,Accessories,8.50,70,Nutrient-rich liquid fertilizer,true

@@ -18,6 +18,7 @@ const {
   createNotification,
   createNotificationForMany,
 } = require("./notificationController");
+const { extractMentionUsernames, resolveMentionIds, notifyMentionedUsers } = require("../utils/mentions");
 
 // ─────────────────────────────────────────────────────────────────────────────
 // HELPERS
@@ -241,12 +242,19 @@ exports.createPost = async (req, res) => {
     let picturePath = null;
     if (req.file) picturePath = req.file.path || req.file.secure_url || null;
 
-    const post = await Poste.create({
+    // Extract @mentions from content
+    const mentionUsernames = extractMentionUsernames(content);
+    const mentionIds = await resolveMentionIds(mentionUsernames);
+
+    const postData = {
       supplierId,
       content: content.trim(),
       picture: picturePath,
-      status: "pending",             // always pending for supplier content
-    });
+      status: "pending",
+    };
+    if (mentionIds.length > 0) postData.mentions = mentionIds;
+
+    const post = await Poste.create(postData);
 
     // Notify all admins of new supplier post needing review
     try {
@@ -263,6 +271,22 @@ exports.createPost = async (req, res) => {
       }
     } catch (notifyErr) {
       console.error("Supplier post admin notification error:", notifyErr.message);
+    }
+
+    // Notify mentioned users
+    try {
+      const Supplier = require("../models/Supplier");
+      const supplier = await Supplier.findById(supplierId).select("firstName lastName");
+      const actorName = supplier ? `${supplier.firstName} ${supplier.lastName}` : "A supplier";
+      await notifyMentionedUsers({
+        mentionedIds: mentionIds,
+        actorUserId: supplierId,
+        postId: post._id,
+        actorName,
+        contextType: "post",
+      });
+    } catch (mentionErr) {
+      console.error("Mention notification error:", mentionErr.message);
     }
 
     res.status(201).json({ data: post });
@@ -287,6 +311,11 @@ exports.updatePost = async (req, res) => {
     if (content !== undefined) {
       if (!content.trim()) return res.status(400).json({ error: "content cannot be empty" });
       post.content = content.trim();
+
+      // Re-extract mentions when content changes
+      const mentionUsernames = extractMentionUsernames(content);
+      const mentionIds = await resolveMentionIds(mentionUsernames);
+      post.mentions = mentionIds.length > 0 ? mentionIds : [];
     }
 
     if (req.file) {
@@ -312,6 +341,24 @@ exports.updatePost = async (req, res) => {
       }
     } catch (notifyErr) {
       console.error("Supplier post update admin notification error:", notifyErr.message);
+    }
+
+    // Notify newly mentioned users
+    try {
+      if (content !== undefined) {
+        const Supplier = require("../models/Supplier");
+        const supplier = await Supplier.findById(supplierId).select("firstName lastName");
+        const actorName = supplier ? `${supplier.firstName} ${supplier.lastName}` : "A supplier";
+        await notifyMentionedUsers({
+          mentionedIds: post.mentions || [],
+          actorUserId: supplierId,
+          postId: post._id,
+          actorName,
+          contextType: "post",
+        });
+      }
+    } catch (mentionErr) {
+      console.error("Mention notification error:", mentionErr.message);
     }
 
     res.json({ data: post });
