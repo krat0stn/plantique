@@ -10,7 +10,7 @@ const ArModelSchema = new Schema(
     thumbUrl: { type: String, trim: true },
     thumbPublicId: { type: String, trim: true },
     tags: [{ type: String, trim: true }],
-    author: { type: Schema.Types.ObjectId, ref: "User" },
+    author: { type: Schema.Types.ObjectId, ref: "Account" },
 
     // Real-world scale range the user can set in AR (meters)
     scaleMin: { type: Number },

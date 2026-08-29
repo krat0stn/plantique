@@ -1,5 +1,5 @@
 const Notification = require("../models/Notification");
-const User = require("../models/User");
+
 exports.createNotification = async ({
   userId,
   type = "system",
@@ -30,9 +30,6 @@ exports.createNotification = async ({
   return notif;
 };
 
-/**
- * Helper : créer la même notif pour plusieurs users (ex: nouveau blog)
- */
 exports.createNotificationForMany = async ({
   userIds,
   type = "blog",
@@ -57,9 +54,6 @@ exports.createNotificationForMany = async ({
   return notifs;
 };
 
-/**
- * GET /api/notifications
- */
 exports.listMyNotifications = async (req, res) => {
   try {
     const userId = req.user._id;
@@ -82,9 +76,6 @@ exports.listMyNotifications = async (req, res) => {
   }
 };
 
-/**
- * PATCH /api/notifications/:id/read
- */
 exports.markAsRead = async (req, res) => {
   try {
     const userId = req.user._id;
@@ -112,9 +103,6 @@ exports.markAsRead = async (req, res) => {
   }
 };
 
-/**
- * PATCH /api/notifications/read-all
- */
 exports.markAllAsRead = async (req, res) => {
   try {
     const userId = req.user._id;
@@ -137,9 +125,6 @@ exports.markAllAsRead = async (req, res) => {
   }
 };
 
-/**
- * DELETE /api/notifications/:id
- */
 exports.deleteNotification = async (req, res) => {
   try {
     const userId = req.user._id;

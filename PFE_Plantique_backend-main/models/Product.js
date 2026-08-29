@@ -4,7 +4,7 @@ const { Schema } = mongoose;
 const ProductSchema = new Schema(
   {
     name:          { type: String, required: true, trim: true },
-    supplier:      { type: Schema.Types.ObjectId, ref: "Supplier", required: true },
+    sellerId:      { type: Schema.Types.ObjectId, ref: "Account", required: true },
     price:         { type: Number, required: true },
     category:      { type: String, required: true, trim: true },
     imageUrl:      { type: String, trim: true },
@@ -18,7 +18,7 @@ const ProductSchema = new Schema(
 );
 
 ProductSchema.index({ category: 1 });
-ProductSchema.index({ supplier: 1 });
+ProductSchema.index({ sellerId: 1 });
 ProductSchema.index({ name: "text", description: "text" });
 
 module.exports = mongoose.model("Product", ProductSchema);

@@ -1,7 +1,6 @@
 // controllers/likeController.js
 const Like = require("../models/Like");
 const Poste = require("../models/Poste");
-const User = require("../models/User");
 const { createNotification } = require("../controllers/notificationController");
 
 // PUT /api/postes/:id/like
@@ -14,34 +13,30 @@ exports.toggle = async (req, res) => {
     let liked;
 
     if (found) {
-      // ➖ On retire le like
       await Like.deleteOne({ _id: found._id });
       await Poste.findByIdAndUpdate(posteId, { $inc: { likesCount: -1 } });
       liked = false;
     } else {
-      // ➕ On ajoute un like
       await Like.create({ posteId, userId });
       await Poste.findByIdAndUpdate(posteId, { $inc: { likesCount: 1 } });
       liked = true;
     }
 
-    // On récupère le post avec son owner
     const post = await Poste.findById(posteId)
-      .select("likesCount userId")
-      .populate("userId", "username");
+      .select("likesCount authorId")
+      .populate("authorId", "username");
 
     const likesCount = post?.likesCount ?? 0;
 
-    // 🔔 Notification si on vient de liker (pas un unlike) et si ce n’est pas notre propre post
     if (
       liked &&
       post &&
-      post.userId &&
-      String(post.userId._id) !== String(userId)
+      post.authorId &&
+      String(post.authorId._id) !== String(userId)
     ) {
       try {
         await createNotification({
-          userId: post.userId._id,
+          userId: post.authorId._id,
           type: "like",
           title: "New like on your post",
           message: `${req.user?.username || "Someone"} liked your post.`,

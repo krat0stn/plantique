@@ -1,14 +1,12 @@
 // controllers/dashboardController.js
-const User = require("../models/User");
+const Account = require("../models/Account");
 const Blog = require("../models/Blog");
 const Review = require("../models/Review");
 const Poste = require("../models/Poste");
 
-// NEW: models for plants & AR
 const PlantCare = require("../models/Plant");
 const ArModel = require("../models/Ar");
 
-//  count by month for last 12 months (kept as-is for /metrics)
 async function countByMonth(Model) {
   const since = new Date();
   since.setMonth(since.getMonth() - 11);
@@ -23,7 +21,6 @@ async function countByMonth(Model) {
     { $sort: { "_id.y": 1, "_id.m": 1 } },
   ]);
 
-  // Build a fixed 12-month series
   const out = [];
   const cursor = new Date(since.getFullYear(), since.getMonth(), 1);
   const map = new Map(agg.map((d) => [`${d._id.y}-${d._id.m}`, d.count]));
@@ -39,7 +36,6 @@ async function countByMonth(Model) {
   return out;
 }
 
-// ---------- Existing dashboard metrics ----------
 exports.metrics = async (req, res) => {
   try {
     const pendingRegex = /^pending$/i;
@@ -56,7 +52,7 @@ exports.metrics = async (req, res) => {
       postsSeries,
       blogsSeries,
     ] = await Promise.all([
-      User.countDocuments({ role: { $ne: "Admin" } }),
+      Account.countDocuments({ role: { $ne: "Admin" } }),
       Blog.countDocuments({}),
       Poste.countDocuments({}),
       Poste.countDocuments({ status: { $regex: pendingRegex } }),
@@ -70,8 +66,8 @@ exports.metrics = async (req, res) => {
       Blog.find({})
         .sort({ createdAt: -1 })
         .limit(5)
-        .populate("author", "username email"),
-      countByMonth(User),
+        .populate("authorId", "username email"),
+      countByMonth(Account),
       countByMonth(Poste),
       countByMonth(Blog),
     ]);
@@ -103,9 +99,6 @@ exports.metrics = async (req, res) => {
   }
 };
 
-// ---------- NEW: Plants & AR analytics for dashboard extras ----------
-
-// Build last 12 month keys in UTC as "YYYY-MM"
 function last12MonthKeys() {
   const now = new Date();
   const keys = [];
@@ -131,7 +124,6 @@ exports.plantsAnalytics = async (req, res) => {
       .map((n) => parseInt(n, 10));
     const startDate = monthStartUTC(startY, startM);
 
-    // Monthly counts for PlantCare
     const plantsAgg = await PlantCare.aggregate([
       { $match: { createdAt: { $gte: startDate } } },
       {
@@ -142,7 +134,6 @@ exports.plantsAnalytics = async (req, res) => {
       },
     ]);
 
-    // Monthly counts for ArModel
     const arAgg = await ArModel.aggregate([
       { $match: { createdAt: { $gte: startDate } } },
       {
@@ -177,7 +168,6 @@ exports.plantsAnalytics = async (req, res) => {
       ArModel.countDocuments(),
     ]);
 
-    // Plant type distribution (split by • , ; /)
     const typeDocs = await PlantCare.find().select("plantType").lean();
     const typeCount = new Map();
     const splitter = /[•,;/]/;
@@ -197,7 +187,6 @@ exports.plantsAnalytics = async (req, res) => {
       .sort((a, b) => b.count - a.count)
       .slice(0, 8);
 
-    // AR coverage: with thumbnail vs without
     const [arWithThumb, arWithoutThumb] = await Promise.all([
       ArModel.countDocuments({ thumbPublicId: { $exists: true, $ne: null } }),
       ArModel.countDocuments({

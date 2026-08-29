@@ -8,10 +8,7 @@ const blogSchema = new Schema(
     excerpt: { type: String, trim: true, maxlength: 500 },
     imageUrl: { type: String, trim: true },
     imagePublicId: { type: String, trim: true },
-    // User who authored (Admin-created blogs). Optional when supplierId is set.
-    author: { type: Schema.Types.ObjectId, ref: "User", required: false },
-    // Supplier who authored (supplier-created blogs)
-    supplierId: { type: Schema.Types.ObjectId, ref: "Supplier", required: false },
+    authorId: { type: Schema.Types.ObjectId, ref: "Account", required: false },
     status: {
       type: String,
       enum: ["pending", "approved", "declined"],
@@ -23,7 +20,7 @@ const blogSchema = new Schema(
 
 blogSchema.index({ createdAt: -1 });
 blogSchema.index({ status: 1, createdAt: -1 });
-blogSchema.index({ supplierId: 1, createdAt: -1 });
+blogSchema.index({ authorId: 1, createdAt: -1 });
 blogSchema.index({ title: "text", content: "text", excerpt: "text" });
 
 blogSchema.pre("validate", function (next) {

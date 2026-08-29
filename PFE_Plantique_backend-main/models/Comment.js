@@ -4,11 +4,10 @@ const { Schema } = mongoose;
 const commentSchema = new Schema(
   {
     posteId: { type: Schema.Types.ObjectId, ref: "Poste", required: true },
-    userId: { type: Schema.Types.ObjectId, ref: "User", default: null },
-    supplierId: { type: Schema.Types.ObjectId, ref: "Supplier", default: null },
+    authorId: { type: Schema.Types.ObjectId, ref: "Account", default: null },
     content: { type: String, required: true, trim: true },
     parentId: { type: Schema.Types.ObjectId, ref: "Comment", default: null },
-    mentions: [{ type: Schema.Types.ObjectId, ref: "User" }],
+    mentions: [{ type: Schema.Types.ObjectId, ref: "Account" }],
   },
   { timestamps: true }
 );

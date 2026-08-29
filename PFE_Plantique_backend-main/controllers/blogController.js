@@ -1,5 +1,5 @@
 const Blog = require("../models/Blog");
-const User = require("../models/User");
+const Account = require("../models/Account");
 const { notifyBlogNew } = require("../utils/realtime");
 const { createNotificationForMany } = require("./notificationController");
 const { cloudinary } = require("../config/cloudinary");
@@ -18,11 +18,11 @@ exports.listPublic = async (req, res) => {
     if (q && q.trim()) filter.$text = { $search: q.trim() };
 
     const [items, total] = await Promise.all([
-      Blog.find(filter, "title excerpt imageUrl author createdAt")
+      Blog.find(filter, "title excerpt imageUrl authorId createdAt")
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit)
-        .populate("author", "username picture"),
+        .populate("authorId", "username picture"),
       Blog.countDocuments(filter),
     ]);
 
@@ -39,7 +39,7 @@ exports.listPublic = async (req, res) => {
 exports.getPublicById = async (req, res) => {
   try {
     const found = await Blog.findById(req.params.id).populate(
-      "author",
+      "authorId",
       "username picture",
     );
     if (!found || found.status !== "approved")
@@ -71,7 +71,7 @@ exports.listAdmin = async (req, res) => {
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit)
-        .populate("author", "username picture"),
+        .populate("authorId", "username picture"),
       Blog.countDocuments(filter),
     ]);
 
@@ -105,13 +105,13 @@ exports.create = async (req, res) => {
       excerpt: excerpt?.trim(),
       imageUrl: req.file.path,
       imagePublicId: req.file.filename,
-      author: req.user?._id || req.user?.id || null,
+      authorId: req.user?._id || req.user?.id || null,
     });
 
     notifyBlogNew?.(created);
 
     try {
-      const clients = await User.find({ role: "User" }).select("_id");
+      const clients = await Account.find({ role: "User" }).select("_id");
       const userIds = clients.map((u) => u._id);
       if (userIds.length > 0) {
         await createNotificationForMany({
@@ -186,7 +186,6 @@ exports.remove = async (req, res) => {
   }
 };
 
-// PUT /api/admin/blogs/:id/approve
 exports.approve = async (req, res) => {
   try {
     const updated = await Blog.findByIdAndUpdate(
@@ -205,7 +204,6 @@ exports.approve = async (req, res) => {
   }
 };
 
-// PUT /api/admin/blogs/:id/decline
 exports.decline = async (req, res) => {
   try {
     const updated = await Blog.findByIdAndUpdate(
@@ -215,7 +213,6 @@ exports.decline = async (req, res) => {
     );
     if (!updated)
       return res.status(404).json({ errormessage: "Blog introuvable" });
-
     return res
       .status(200)
       .json({ successmessage: "Blog refusé", data: updated });

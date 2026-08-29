@@ -107,14 +107,23 @@ class SupplierPostsPage extends StatefulWidget {
 
 class _SupplierPostsPageState extends State<SupplierPostsPage> {
   List<SupplierPostModel> posts = [];
+  List<SupplierPostModel> mentionedPosts = [];
+  final Set<String> _hiddenPostIds = {};
+  bool _showHidden = false;
+  final TextEditingController _mentionedSearchCtrl = TextEditingController();
+  String _mentionedQuery = '';
   bool loading = true;
+  bool loadingMentioned = false;
   String? error;
+  String? errorMentioned;
+  int _selectedTab = 0;
   PlatformFile? selectedImage;
 
   @override
   void initState() {
     super.initState();
     loadPosts();
+    loadMentionedPosts();
   }
 
   Future<void> loadPosts() async {
@@ -132,6 +141,24 @@ class _SupplierPostsPageState extends State<SupplierPostsPage> {
       setState(() => error = 'Failed to load posts: $e');
     } finally {
       setState(() => loading = false);
+    }
+  }
+
+  Future<void> loadMentionedPosts() async {
+    setState(() {
+      loadingMentioned = true;
+      errorMentioned = null;
+    });
+    try {
+      final data = await ApiService.getMentionedPosts();
+      final List<dynamic> list = data['data'] ?? [];
+      setState(() {
+        mentionedPosts = list.map((p) => SupplierPostModel.fromJson(p)).toList();
+      });
+    } catch (e) {
+      setState(() => errorMentioned = 'Failed to load mentioned posts: $e');
+    } finally {
+      setState(() => loadingMentioned = false);
     }
   }
 
@@ -862,6 +889,35 @@ class _SupplierPostsPageState extends State<SupplierPostsPage> {
     );
   }
 
+  Widget _buildTab(int index, String label, IconData icon) {
+    final isSelected = _selectedTab == index;
+    return GestureDetector(
+      onTap: () => setState(() => _selectedTab = index),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        decoration: BoxDecoration(
+          color: isSelected ? Colors.green : Colors.grey.shade200,
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 16, color: isSelected ? Colors.white : Colors.grey.shade600),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: TextStyle(
+                color: isSelected ? Colors.white : Colors.grey.shade600,
+                fontWeight: FontWeight.bold,
+                fontSize: 13,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -886,171 +942,155 @@ class _SupplierPostsPageState extends State<SupplierPostsPage> {
                 ),
                 const Spacer(),
                 ElevatedButton.icon(
-                  onPressed: loadPosts,
+                  onPressed: () {
+                    loadPosts();
+                    loadMentionedPosts();
+                  },
                   icon: const Icon(Icons.refresh),
                   label: const Text('Refresh'),
                 ),
                 const SizedBox(width: 10),
-                ElevatedButton.icon(
-                  onPressed: () => _showPostDialog(),
-                  icon: const Icon(Icons.add),
-                  label: const Text('New Post'),
-                ),
+                if (_selectedTab == 0)
+                  ElevatedButton.icon(
+                    onPressed: () => _showPostDialog(),
+                    icon: const Icon(Icons.add),
+                    label: const Text('New Post'),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                _buildTab(0, 'My Posts', Icons.person),
+                const SizedBox(width: 8),
+                _buildTab(1, 'Mentioned', Icons.alternate_email),
               ],
             ),
             const SizedBox(height: 20),
-            if (loading)
-              const Expanded(child: Center(child: CircularProgressIndicator()))
-            else if (error != null)
-              Expanded(
-                child: Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text(error!, style: const TextStyle(color: Colors.red)),
-                      const SizedBox(height: 10),
-                      ElevatedButton(
-                        onPressed: loadPosts,
-                        child: const Text('Retry'),
-                      ),
-                    ],
-                  ),
-                ),
-              )
-            else if (posts.isEmpty)
-              const Expanded(
-                child: Center(
-                  child: Text(
-                    'No posts yet. Click "New Post" to create one.',
-                    style: TextStyle(color: Colors.grey, fontSize: 16),
-                  ),
-                ),
-              )
-            else
-              Expanded(
-                child: Card(
-                  elevation: 5,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(12),
-                    child: SingleChildScrollView(
-                        scrollDirection: Axis.vertical,
-                        child: SingleChildScrollView(
-                            scrollDirection: Axis.horizontal,
-                            child: DataTable(
-                        headingRowColor: WidgetStateProperty.all(
-                          const Color.fromARGB(
-                            186,
-                            234,
-                            143,
-                            143,
-                          ).withValues(alpha: 0.3),
+            if (_selectedTab == 0) ...[
+              if (loading)
+                const Expanded(child: Center(child: CircularProgressIndicator()))
+              else if (error != null)
+                Expanded(
+                  child: Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(error!, style: const TextStyle(color: Colors.red)),
+                        const SizedBox(height: 10),
+                        ElevatedButton(
+                          onPressed: loadPosts,
+                          child: const Text('Retry'),
                         ),
-                        columns: const [
-                          DataColumn(
-                            label: Text(
-                              'Content',
-                              style: TextStyle(fontWeight: FontWeight.bold),
-                            ),
+                      ],
+                    ),
+                  ),
+                )
+              else if (posts.isEmpty)
+                const Expanded(
+                  child: Center(
+                    child: Text(
+                      'No posts yet. Click "New Post" to create one.',
+                      style: TextStyle(color: Colors.grey, fontSize: 16),
+                    ),
+                  ),
+                )
+              else
+                Expanded(
+                  child: Card(
+                    elevation: 5,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(12),
+                      child: SingleChildScrollView(
+                          scrollDirection: Axis.vertical,
+                          child: SingleChildScrollView(
+                              scrollDirection: Axis.horizontal,
+                              child: DataTable(
+                          headingRowColor: WidgetStateProperty.all(
+                            const Color.fromARGB(
+                              186,
+                              234,
+                              143,
+                              143,
+                            ).withValues(alpha: 0.3),
                           ),
-                          DataColumn(
-                            label: Text(
-                              'Status',
-                              style: TextStyle(fontWeight: FontWeight.bold),
+                          columns: const [
+                            DataColumn(
+                              label: Text(
+                                'Content',
+                                style: TextStyle(fontWeight: FontWeight.bold),
+                              ),
                             ),
-                          ),
-                          DataColumn(
-                            label: Text(
-                              'Likes',
-                              style: TextStyle(fontWeight: FontWeight.bold),
+                            DataColumn(
+                              label: Text(
+                                'Status',
+                                style: TextStyle(fontWeight: FontWeight.bold),
+                              ),
                             ),
-                          ),
-                          DataColumn(
-                            label: Text(
-                              'Comments',
-                              style: TextStyle(fontWeight: FontWeight.bold),
+                            DataColumn(
+                              label: Text(
+                                'Likes',
+                                style: TextStyle(fontWeight: FontWeight.bold),
+                              ),
                             ),
-                          ),
-                          DataColumn(
-                            label: Text(
-                              'Date',
-                              style: TextStyle(fontWeight: FontWeight.bold),
+                            DataColumn(
+                              label: Text(
+                                'Comments',
+                                style: TextStyle(fontWeight: FontWeight.bold),
+                              ),
                             ),
-                          ),
-                          DataColumn(
-                            label: Text(
-                              'Actions',
-                              style: TextStyle(fontWeight: FontWeight.bold),
+                            DataColumn(
+                              label: Text(
+                                'Date',
+                                style: TextStyle(fontWeight: FontWeight.bold),
+                              ),
                             ),
-                          ),
-                        ],
-                        rows: posts.map((p) {
-                          final preview = p.content.length > 80
-                              ? '${p.content.substring(0, 80)}…'
-                              : p.content;
-                          return DataRow(
-                            cells: [
-                              DataCell(
-                                SizedBox(
-                                  width: 300,
-                                  child: buildHighlightedText(
-                                    preview,
-                                    fontSize: 13,
+                            DataColumn(
+                              label: Text(
+                                'Actions',
+                                style: TextStyle(fontWeight: FontWeight.bold),
+                              ),
+                            ),
+                          ],
+                          rows: posts.map((p) {
+                            final preview = p.content.length > 80
+                                ? '${p.content.substring(0, 80)}…'
+                                : p.content;
+                            return DataRow(
+                              cells: [
+                                DataCell(
+                                  SizedBox(
+                                    width: 300,
+                                    child: buildHighlightedText(
+                                      preview,
+                                      fontSize: 13,
+                                    ),
                                   ),
                                 ),
-                              ),
-                              DataCell(_statusBadge(p.status)),
-                              DataCell(
-                                InkWell(
-                                  onTap: p.likesCount > 0
-                                      ? () => _showLikesDialog(p)
-                                      : null,
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Icon(Icons.favorite,
-                                          size: 16,
-                                          color: p.likesCount > 0
-                                              ? Colors.red
-                                              : Colors.grey),
-                                      const SizedBox(width: 4),
-                                      Text(
-                                        '${p.likesCount}',
-                                        style: TextStyle(
-                                          fontWeight: FontWeight.bold,
-                                          color: p.likesCount > 0
-                                              ? Colors.red
-                                              : Colors.grey,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                              DataCell(
-                                InkWell(
-                                  onTap: () => _showCommentsDialog(p),
-                                  child: Tooltip(
-                                    message: p.status != 'approved'
-                                        ? 'Post must be approved to add comments'
-                                        : 'View & manage comments',
+                                DataCell(_statusBadge(p.status)),
+                                DataCell(
+                                  InkWell(
+                                    onTap: p.likesCount > 0
+                                        ? () => _showLikesDialog(p)
+                                        : null,
                                     child: Row(
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
-                                        Icon(Icons.comment,
+                                        Icon(Icons.favorite,
                                             size: 16,
-                                            color: p.commentsCount > 0
-                                                ? Colors.blue
+                                            color: p.likesCount > 0
+                                                ? Colors.red
                                                 : Colors.grey),
                                         const SizedBox(width: 4),
                                         Text(
-                                          '${p.commentsCount}',
+                                          '${p.likesCount}',
                                           style: TextStyle(
                                             fontWeight: FontWeight.bold,
-                                            color: p.commentsCount > 0
-                                                ? Colors.blue
+                                            color: p.likesCount > 0
+                                                ? Colors.red
                                                 : Colors.grey,
                                           ),
                                         ),
@@ -1058,44 +1098,305 @@ class _SupplierPostsPageState extends State<SupplierPostsPage> {
                                     ),
                                   ),
                                 ),
-                              ),
-                              DataCell(
-                                Text(
-                                  '${p.createdAt.year}-${p.createdAt.month.toString().padLeft(2, '0')}-${p.createdAt.day.toString().padLeft(2, '0')}',
-                                ),
-                              ),
-                              DataCell(
-                                Row(
-                                  children: [
-                                    IconButton(
-                                      icon: const Icon(
-                                        Icons.edit,
-                                        color: Colors.blue,
+                                DataCell(
+                                  InkWell(
+                                    onTap: () => _showCommentsDialog(p),
+                                    child: Tooltip(
+                                      message: p.status != 'approved'
+                                          ? 'Post must be approved to add comments'
+                                          : 'View & manage comments',
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Icon(Icons.comment,
+                                              size: 16,
+                                              color: p.commentsCount > 0
+                                                  ? Colors.blue
+                                                  : Colors.grey),
+                                          const SizedBox(width: 4),
+                                          Text(
+                                            '${p.commentsCount}',
+                                            style: TextStyle(
+                                              fontWeight: FontWeight.bold,
+                                              color: p.commentsCount > 0
+                                                  ? Colors.blue
+                                                  : Colors.grey,
+                                            ),
+                                          ),
+                                        ],
                                       ),
-                                      tooltip: 'Edit',
-                                      onPressed: () =>
-                                          _showPostDialog(post: p),
                                     ),
-                                    IconButton(
-                                      icon: const Icon(
-                                        Icons.delete,
-                                        color: Colors.red,
-                                      ),
-                                      tooltip: 'Delete',
-                                      onPressed: () => deletePost(p),
-                                    ),
-                                  ],
+                                  ),
                                 ),
-                              ),
-                            ],
-                          );
-                        }).toList(),
+                                DataCell(
+                                  Text(
+                                    '${p.createdAt.year}-${p.createdAt.month.toString().padLeft(2, '0')}-${p.createdAt.day.toString().padLeft(2, '0')}',
+                                  ),
+                                ),
+                                DataCell(
+                                  Row(
+                                    children: [
+                                      IconButton(
+                                        icon: const Icon(
+                                          Icons.edit,
+                                          color: Colors.blue,
+                                        ),
+                                        tooltip: 'Edit',
+                                        onPressed: () =>
+                                            _showPostDialog(post: p),
+                                      ),
+                                      IconButton(
+                                        icon: const Icon(
+                                          Icons.delete,
+                                          color: Colors.red,
+                                        ),
+                                        tooltip: 'Delete',
+                                        onPressed: () => deletePost(p),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            );
+                          }).toList(),
+                          ),
                         ),
                       ),
                     ),
                   ),
                 ),
-              ),
+            ] else ...[
+              if (loadingMentioned)
+                const Expanded(child: Center(child: CircularProgressIndicator()))
+              else if (errorMentioned != null)
+                Expanded(
+                  child: Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(errorMentioned!, style: const TextStyle(color: Colors.red)),
+                        const SizedBox(height: 10),
+                        ElevatedButton(
+                          onPressed: loadMentionedPosts,
+                          child: const Text('Retry'),
+                        ),
+                      ],
+                    ),
+                  ),
+                )
+              else ...[
+                // Mentioned tab toolbar: search + show hidden
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: _mentionedSearchCtrl,
+                          decoration: InputDecoration(
+                            hintText: 'Search mentioned posts...',
+                            prefixIcon: const Icon(Icons.search, size: 20),
+                            suffixIcon: _mentionedQuery.isNotEmpty
+                                ? IconButton(
+                                    icon: const Icon(Icons.clear, size: 18),
+                                    onPressed: () {
+                                      _mentionedSearchCtrl.clear();
+                                      setState(() => _mentionedQuery = '');
+                                    },
+                                  )
+                                : null,
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                            isDense: true,
+                          ),
+                          onChanged: (v) => setState(() => _mentionedQuery = v.trim().toLowerCase()),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      if (_hiddenPostIds.isNotEmpty)
+                        TextButton.icon(
+                          onPressed: () => setState(() => _showHidden = !_showHidden),
+                          icon: Icon(
+                            _showHidden ? Icons.visibility : Icons.visibility_off,
+                            size: 18,
+                          ),
+                          label: Text(_showHidden ? 'Hide hidden' : 'Show hidden (${_hiddenPostIds.length})'),
+                        ),
+                    ],
+                  ),
+                ),
+                // Mentioned posts table or empty state
+                Builder(
+                  builder: (ctx) {
+                    final visiblePosts = mentionedPosts.where((p) {
+                      if (!_showHidden && _hiddenPostIds.contains(p.id)) return false;
+                      if (_mentionedQuery.isNotEmpty && !p.content.toLowerCase().contains(_mentionedQuery)) return false;
+                      return true;
+                    }).toList();
+                    if (visiblePosts.isEmpty) {
+                      return Expanded(
+                        child: Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                _mentionedQuery.isNotEmpty ? Icons.search_off : Icons.alternate_email,
+                                size: 48,
+                                color: Colors.grey,
+                              ),
+                              const SizedBox(height: 12),
+                              Text(
+                                _mentionedQuery.isNotEmpty
+                                    ? 'No matching posts found.'
+                                    : _showHidden
+                                        ? 'No hidden posts.'
+                                        : 'No mentioned posts yet.',
+                                style: const TextStyle(color: Colors.grey, fontSize: 16),
+                              ),
+                              if (!_mentionedQuery.isNotEmpty && !_showHidden) ...[
+                                const SizedBox(height: 6),
+                                const Text(
+                                  'When someone tags you in a post, it will appear here.',
+                                  style: TextStyle(color: Colors.grey, fontSize: 13),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                      );
+                    }
+                    return Expanded(
+                      child: Card(
+                        elevation: 5,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(12),
+                          child: SingleChildScrollView(
+                            scrollDirection: Axis.vertical,
+                            child: SingleChildScrollView(
+                              scrollDirection: Axis.horizontal,
+                              child: DataTable(
+                                headingRowColor: WidgetStateProperty.all(
+                                  const Color.fromARGB(186, 234, 143, 143).withValues(alpha: 0.3),
+                                ),
+                                columns: const [
+                                  DataColumn(
+                                    label: Text('Content', style: TextStyle(fontWeight: FontWeight.bold)),
+                                  ),
+                                  DataColumn(
+                                    label: Text('Likes', style: TextStyle(fontWeight: FontWeight.bold)),
+                                  ),
+                                  DataColumn(
+                                    label: Text('Comments', style: TextStyle(fontWeight: FontWeight.bold)),
+                                  ),
+                                  DataColumn(
+                                    label: Text('Date', style: TextStyle(fontWeight: FontWeight.bold)),
+                                  ),
+                                  DataColumn(
+                                    label: Text('Actions', style: TextStyle(fontWeight: FontWeight.bold)),
+                                  ),
+                                ],
+                                rows: visiblePosts.map((p) {
+                                  final preview = p.content.length > 80
+                                      ? '${p.content.substring(0, 80)}…'
+                                      : p.content;
+                                  final isHidden = _hiddenPostIds.contains(p.id);
+                                  return DataRow(
+                                    cells: [
+                                      DataCell(
+                                        SizedBox(
+                                          width: 300,
+                                          child: Opacity(
+                                            opacity: isHidden ? 0.4 : 1.0,
+                                            child: buildHighlightedText(preview, fontSize: 13),
+                                          ),
+                                        ),
+                                      ),
+                                      DataCell(
+                                        Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Icon(Icons.favorite,
+                                                size: 16,
+                                                color: p.likesCount > 0 ? Colors.red : Colors.grey),
+                                            const SizedBox(width: 4),
+                                            Text(
+                                              '${p.likesCount}',
+                                              style: TextStyle(
+                                                fontWeight: FontWeight.bold,
+                                                color: p.likesCount > 0 ? Colors.red : Colors.grey,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      DataCell(
+                                        Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Icon(Icons.comment,
+                                                size: 16,
+                                                color: p.commentsCount > 0 ? Colors.blue : Colors.grey),
+                                            const SizedBox(width: 4),
+                                            Text(
+                                              '${p.commentsCount}',
+                                              style: TextStyle(
+                                                fontWeight: FontWeight.bold,
+                                                color: p.commentsCount > 0 ? Colors.blue : Colors.grey,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      DataCell(
+                                        Text(
+                                          '${p.createdAt.year}-${p.createdAt.month.toString().padLeft(2, '0')}-${p.createdAt.day.toString().padLeft(2, '0')}',
+                                        ),
+                                      ),
+                                      DataCell(
+                                        Row(
+                                          children: [
+                                            IconButton(
+                                              icon: const Icon(Icons.reply, color: Colors.green),
+                                              tooltip: 'Reply',
+                                              onPressed: () => _showCommentsDialog(p),
+                                            ),
+                                            IconButton(
+                                              icon: Icon(
+                                                isHidden ? Icons.visibility : Icons.visibility_off,
+                                                color: isHidden ? Colors.orange : Colors.grey,
+                                              ),
+                                              tooltip: isHidden ? 'Unhide' : 'Hide',
+                                              onPressed: () {
+                                                setState(() {
+                                                  if (isHidden) {
+                                                    _hiddenPostIds.remove(p.id);
+                                                  } else {
+                                                    _hiddenPostIds.add(p.id);
+                                                  }
+                                                });
+                                              },
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                                  );
+                                }).toList(),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ],
+            ],
           ],
         ),
       ),

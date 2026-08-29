@@ -3,26 +3,12 @@ const Poste = require("../models/Poste");
 const Like = require("../models/Like");
 const Save = require("../models/Save");
 const Comment = require("../models/Comment");
-const User = require("../models/User");
+const Account = require("../models/Account");
 const { notifyPostNew } = require("../utils/realtime");
 const {
   createNotification,
   createNotificationForMany,
 } = require("../controllers/notificationController");
-
-// GET /api/postes
-exports.getAllPostesAdmin = async (req, res) => {
-  try {
-    const posts = await Poste.find()
-      .sort({ createdAt: -1 })
-      .populate('userId', 'username email picture');
-    
-    res.json({ ok: true, data: posts });
-  } catch (err) {
-    console.error("Error fetching admin posts:", err);
-    res.status(500).json({ ok: false, error: err.message });
-  }
-};
 
 // GET /api/postes/:id
 exports.getPosteById = async (req, res) => {
@@ -43,7 +29,6 @@ exports.getPosteById = async (req, res) => {
 // POST /api/postes
 exports.create = async (req, res) => {
   try {
-    // Id utilisateur sécurisé via token, fallback sur body si besoin
     const userId = req.user?.id || req.user?._id || req.body.userId;
     const { content, status } = req.body;
 
@@ -58,16 +43,14 @@ exports.create = async (req, res) => {
       : req.body.picture?.toString() || null;
 
     const newPoste = await Poste.create({
-      userId,
+      authorId: userId,
       content: content.trim(),
       picture: picturePath,
       ...(status ? { status } : {}),
     });
 
-    // 🔔 Realtime
     notifyPostNew?.(newPoste);
 
-    // 🔔 Notification à l'auteur
     try {
       await createNotification({
         userId,
@@ -83,9 +66,8 @@ exports.create = async (req, res) => {
       );
     }
 
-    // 🔔 Notification à tous les admins (nouveau post à modérer)
     try {
-      const admins = await User.find({ role: "Admin" }).select("_id");
+      const admins = await Account.find({ role: "Admin" }).select("_id");
       const adminIds = admins.map((a) => a._id);
 
       if (adminIds.length > 0) {
@@ -239,10 +221,10 @@ exports.getAllPostesPublic = async (req, res) => {
   try {
     const items = await Poste.find(
       { status: "approved" },
-      "userId content picture likesCount commentsCount savedCount createdAt"
+      "authorId content picture likesCount commentsCount savedCount createdAt"
     )
       .sort({ createdAt: -1 })
-      .populate("userId", "username picture email");
+      .populate("authorId", "username picture email role");
 
     return res.status(200).json({
       successmessage: "Posts approuvés récupérés avec succès",
@@ -256,7 +238,7 @@ exports.getAllPostesPublic = async (req, res) => {
 exports.listMine = async (req, res) => {
   try {
     const userId = req.user?.id || req.user?._id;
-    const posts = await Poste.find({ userId }).sort({ createdAt: -1 });
+    const posts = await Poste.find({ authorId: userId }).sort({ createdAt: -1 });
     return res.json({ data: posts });
   } catch (e) {
     return res.status(500).json({ errormessage: "Erreur: " + e.message });
@@ -298,12 +280,12 @@ exports.getAllPostesAdmin = async (req, res) => {
     const [items, total] = await Promise.all([
       Poste.find(
         filter,
-        "userId content picture status likesCount savedCount commentsCount  createdAt updatedAt"
+        "authorId content picture status likesCount savedCount commentsCount createdAt updatedAt"
       )
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit)
-        .populate("userId", "username picture email role"),
+        .populate("authorId", "username picture email role"),
       Poste.countDocuments(filter),
     ]);
 

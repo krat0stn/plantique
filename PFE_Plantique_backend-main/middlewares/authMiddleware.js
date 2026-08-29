@@ -1,6 +1,6 @@
 // middlewares/authMiddleware.js
 const jwt = require("jsonwebtoken");
-const Supplier = require("../models/Supplier");
+const Account = require("../models/Account");
 
 function getToken(req) {
   const h = req.headers["authorization"] || "";
@@ -33,8 +33,6 @@ exports.verifyToken = (req, res, next) => {
       _id: userId,
       id: userId,
       role,
-      // Supplier-specific claim (set when role === 'Supplier')
-      supplierId: decoded.supplierId || null,
     };
     res.locals.userId = userId;
     res.locals.userRole = role;
@@ -69,26 +67,25 @@ exports.isSupplier = async (req, res, next) => {
   if (req.user.role !== "Supplier") {
     return res.status(403).json({ errormessage: "Supplier access required" });
   }
-  if (!req.user.supplierId) {
-    return res.status(403).json({ errormessage: "Supplier identity missing from token" });
-  }
 
-  // Check if subscription has expired → auto-suspend
   try {
-    const supplier = await Supplier.findById(req.user.supplierId).select("isActive subscriptionEnd");
-    if (!supplier) {
+    const account = await Account.findById(req.user.id).select("isActive subscriptionEnd role");
+    if (!account) {
       return res.status(403).json({ errormessage: "Supplier account not found" });
     }
-    if (!supplier.isActive) {
+    if (account.role !== "Supplier") {
+      return res.status(403).json({ errormessage: "Account is not a supplier" });
+    }
+    if (!account.isActive) {
       return res.status(403).json({ errormessage: "Supplier account is suspended" });
     }
-    if (supplier.subscriptionEnd && new Date() > supplier.subscriptionEnd) {
-      supplier.isActive = false;
-      await supplier.save();
+    if (account.subscriptionEnd && new Date() > account.subscriptionEnd) {
+      account.isActive = false;
+      await account.save();
       return res.status(403).json({ errormessage: "Subscription expired. Account has been suspended." });
     }
   } catch (err) {
-    // If DB check fails, let the request through (don't block on infra errors)
+    // If DB check fails, let the request through
   }
 
   next();

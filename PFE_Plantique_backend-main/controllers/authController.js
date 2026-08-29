@@ -1,5 +1,4 @@
-const User = require("../models/User");
-const Supplier = require("../models/Supplier");
+const Account = require("../models/Account");
 const bcrypt = require("bcrypt");
 const { Resend } = require("resend");
 const { generateResetEmailTemplate } = require("../utils/emailTemplates");
@@ -7,25 +6,30 @@ const jwt = require("jsonwebtoken");
 const validator = require("validator");
 const { OAuth2Client } = require("google-auth-library");
 
-const resend = new Resend(process.env.RESEND_API_KEY); 
+const resend = new Resend(process.env.RESEND_API_KEY);
+
 // -----------------------
 // Helpers
 // -----------------------
-function isAccountDisabled(user) {
-  // Adjust if your schema uses other values (e.g. "Inactive", "Blocked")
-  return user?.status && user.status !== "Active";
+function isAccountDisabled(account) {
+  return account?.status && account.status !== "Active";
 }
 
-function signJwt(user) {
-  return jwt.sign(
-    { id: user._id, role: user.role, username: user.username },
-    process.env.JWT_SECRET,
-    { expiresIn: "7d" }
-  );
+function signJwt(account) {
+  const payload = {
+    id: account._id,
+    role: account.role,
+    username: account.username,
+  };
+  if (account.role === "Supplier") {
+    payload.supplierId = account._id;
+    payload.shopName = account.shopName;
+  }
+  return jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: "7d" });
 }
 
 // -----------------------
-// SIGN IN (ENGLISH ERRORS)
+// SIGN IN
 // -----------------------
 exports.signin = async (req, res) => {
   try {
@@ -50,50 +54,9 @@ exports.signin = async (req, res) => {
       });
     }
 
-    // Look up the account across both collections: Users (Admin/User) first,
-    // then Suppliers. Whichever one matches decides how the person is signed
-    // in and which dashboard they land on - no manual "login as" switch needed.
-    const user = await User.findOne({ email });
+    const account = await Account.findOne({ email }).select("+password");
 
-    if (user) {
-      if (isAccountDisabled(user)) {
-        return res.status(403).json({
-          code: "ACCOUNT_DISABLED",
-          errormessage: "Account is disabled.",
-        });
-      }
-
-      // If user.password is empty (e.g. created via Google), block password login
-      if (!user.password) {
-        return res.status(401).json({
-          code: "PASSWORD_LOGIN_NOT_AVAILABLE",
-          errormessage: "Password login is not available for this account.",
-        });
-      }
-
-      const ok = await bcrypt.compare(password, user.password || "");
-      if (!ok) {
-        return res.status(401).json({
-          code: "INVALID_PASSWORD",
-          errormessage: "Incorrect password.",
-          errors: { password: "Incorrect password." },
-        });
-      }
-
-      const token = signJwt(user);
-      const { password: _p, resetCode: _r, resetCodeExpires: _e, ...safeUser } = user.toObject();
-
-      return res.status(200).json({
-        message: "Signed in successfully.",
-        token,
-        user: safeUser,
-      });
-    }
-
-    // Not a User account - check the Suppliers collection before failing.
-    const supplier = await Supplier.findOne({ email }).select("+password");
-
-    if (!supplier) {
+    if (!account) {
       return res.status(404).json({
         code: "EMAIL_NOT_FOUND",
         errormessage: "This email does not exist.",
@@ -101,22 +64,29 @@ exports.signin = async (req, res) => {
       });
     }
 
-    if (!supplier.isActive) {
+    if (isAccountDisabled(account)) {
+      return res.status(403).json({
+        code: "ACCOUNT_DISABLED",
+        errormessage: "Account is disabled.",
+      });
+    }
+
+    if (account.role === "Supplier" && !account.isActive) {
       return res.status(403).json({
         code: "ACCOUNT_DISABLED",
         errormessage: "This supplier account has been suspended.",
       });
     }
 
-    if (!supplier.password) {
+    if (!account.password) {
       return res.status(401).json({
-        code: "PASSWORD_NOT_SET",
-        errormessage: "No password is set for this account.",
+        code: "PASSWORD_LOGIN_NOT_AVAILABLE",
+        errormessage: "Password login is not available for this account.",
       });
     }
 
-    const supplierOk = await bcrypt.compare(password, supplier.password);
-    if (!supplierOk) {
+    const ok = await bcrypt.compare(password, account.password || "");
+    if (!ok) {
       return res.status(401).json({
         code: "INVALID_PASSWORD",
         errormessage: "Incorrect password.",
@@ -124,24 +94,13 @@ exports.signin = async (req, res) => {
       });
     }
 
-    const supplierToken = jwt.sign(
-      {
-        id: supplier._id,
-        supplierId: supplier._id,
-        role: "Supplier",
-        shopName: supplier.shopName,
-      },
-      process.env.JWT_SECRET,
-      { expiresIn: "7d" }
-    );
-
-    const safeSupplier = supplier.toObject();
-    delete safeSupplier.password;
+    const token = signJwt(account);
+    const { password: _p, resetCode: _r, resetCodeExpires: _e, ...safeAccount } = account.toObject();
 
     return res.status(200).json({
-      message: "Supplier signed in successfully.",
-      token: supplierToken,
-      user: { ...safeSupplier, role: "Supplier" },
+      message: "Signed in successfully.",
+      token,
+      user: safeAccount,
     });
   } catch (err) {
     return res.status(500).json({
@@ -152,11 +111,10 @@ exports.signin = async (req, res) => {
 };
 
 // -----------------------
-// SIGN UP (ENGLISH ERRORS)
+// SIGN UP
 // -----------------------
 exports.signup = async (req, res) => {
   try {
-    // Cloudinary (multer-storage-cloudinary) usually gives you a URL in file.path
     const pictureFromFile =
       req.file && (req.file.path || req.file.secure_url || req.file.filename)
         ? (req.file.path || req.file.secure_url || req.file.filename).toString()
@@ -185,7 +143,7 @@ exports.signup = async (req, res) => {
       });
     }
 
-    const existing = await User.findOne({ email });
+    const existing = await Account.findOne({ email });
     if (existing) {
       return res.status(400).json({
         code: "EMAIL_ALREADY_EXISTS",
@@ -196,7 +154,7 @@ exports.signup = async (req, res) => {
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
 
-    const newUser = await User.create({
+    const newAccount = await Account.create({
       username,
       email,
       password: hashedPassword,
@@ -205,11 +163,11 @@ exports.signup = async (req, res) => {
       status: "Active",
     });
 
-    const { password: _p, resetCode: _r, resetCodeExpires: _e, ...safeUser } = newUser.toObject();
+    const { password: _p, resetCode: _r, resetCodeExpires: _e, ...safeAccount } = newAccount.toObject();
 
     return res.status(201).json({
       successmessage: "User created successfully.",
-      user: safeUser,
+      user: safeAccount,
     });
   } catch (error) {
     return res.status(500).json({
@@ -220,7 +178,7 @@ exports.signup = async (req, res) => {
 };
 
 // -----------------------
-// CREATE USER (admin create) - ENGLISH ERRORS
+// CREATE USER (admin create)
 // -----------------------
 exports.create = async (req, res) => {
   try {
@@ -240,8 +198,8 @@ exports.create = async (req, res) => {
       });
     }
 
-    const existingUser = await User.findOne({ email });
-    if (existingUser) {
+    const existing = await Account.findOne({ email });
+    if (existing) {
       return res.status(400).json({
         code: "EMAIL_ALREADY_EXISTS",
         errormessage: "Email already exists.",
@@ -251,7 +209,7 @@ exports.create = async (req, res) => {
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
 
-    const created = await User.create({
+    const created = await Account.create({
       username,
       email,
       password: hashedPassword,
@@ -275,7 +233,7 @@ exports.create = async (req, res) => {
 };
 
 // -----------------------
-// FORGOT PASSWORD (ENGLISH ERRORS)
+// FORGOT PASSWORD
 // -----------------------
 exports.forgotPassword = async (req, res) => {
   try {
@@ -295,8 +253,8 @@ exports.forgotPassword = async (req, res) => {
       });
     }
 
-    const user = await User.findOne({ email });
-    if (!user) {
+    const account = await Account.findOne({ email });
+    if (!account) {
       return res.status(404).json({
         code: "EMAIL_NOT_FOUND",
         message: "User not found.",
@@ -304,9 +262,9 @@ exports.forgotPassword = async (req, res) => {
     }
 
     const resetCode = Math.floor(100000 + Math.random() * 900000).toString();
-    user.resetCode = resetCode;
-    user.resetCodeExpires = Date.now() + 15 * 60 * 1000;
-    await user.save();
+    account.resetCode = resetCode;
+    account.resetCodeExpires = Date.now() + 15 * 60 * 1000;
+    await account.save();
 
     if (!process.env.RESEND_API_KEY) {
       console.error("forgotPassword: RESEND_API_KEY is not set");
@@ -318,9 +276,9 @@ exports.forgotPassword = async (req, res) => {
 
     const { data, error: emailError } = await resend.emails.send({
       from: `${fromName} <${fromAddress}>`,
-      to: user.email,
+      to: account.email,
       subject: "Password reset",
-      html: generateResetEmailTemplate(resetCode, user.username),
+      html: generateResetEmailTemplate(resetCode, account.username),
     });
 
     if (emailError) {
@@ -345,7 +303,7 @@ exports.forgotPassword = async (req, res) => {
 };
 
 // -----------------------
-// VERIFY RESET CODE (ENGLISH ERRORS)
+// VERIFY RESET CODE
 // -----------------------
 exports.verifyResetCode = async (req, res) => {
   try {
@@ -358,13 +316,13 @@ exports.verifyResetCode = async (req, res) => {
       });
     }
 
-    const user = await User.findOne({
+    const account = await Account.findOne({
       email,
       resetCode,
       resetCodeExpires: { $gt: Date.now() },
     });
 
-    if (!user) {
+    if (!account) {
       return res.status(400).json({
         code: "INVALID_OR_EXPIRED_CODE",
         message: "Invalid or expired code.",
@@ -381,7 +339,7 @@ exports.verifyResetCode = async (req, res) => {
 };
 
 // -----------------------
-// RESET PASSWORD (ENGLISH ERRORS)
+// RESET PASSWORD
 // -----------------------
 exports.resetPassword = async (req, res) => {
   try {
@@ -401,13 +359,13 @@ exports.resetPassword = async (req, res) => {
       });
     }
 
-    const user = await User.findOne({
+    const account = await Account.findOne({
       email,
       resetCode,
       resetCodeExpires: { $gt: Date.now() },
-    });
+    }).select("+password");
 
-    if (!user) {
+    if (!account) {
       return res.status(400).json({
         code: "INVALID_OR_EXPIRED_CODE",
         message: "Invalid or expired code.",
@@ -415,10 +373,10 @@ exports.resetPassword = async (req, res) => {
     }
 
     const salt = await bcrypt.genSalt(10);
-    user.password = await bcrypt.hash(newPassword, salt);
-    user.resetCode = null;
-    user.resetCodeExpires = null;
-    await user.save();
+    account.password = await bcrypt.hash(newPassword, salt);
+    account.resetCode = null;
+    account.resetCodeExpires = null;
+    await account.save();
 
     return res.status(200).json({
       message: "Password updated successfully.",
@@ -432,7 +390,7 @@ exports.resetPassword = async (req, res) => {
 };
 
 // -----------------------
-// GOOGLE LOGIN (ENGLISH ERRORS)
+// GOOGLE LOGIN
 // -----------------------
 const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
@@ -462,10 +420,10 @@ exports.googleLogin = async (req, res) => {
       });
     }
 
-    let user = await User.findOne({ email });
+    let account = await Account.findOne({ email });
 
-    if (!user) {
-      user = await User.create({
+    if (!account) {
+      account = await Account.create({
         username: name,
         email: email,
         role: "User",
@@ -473,20 +431,20 @@ exports.googleLogin = async (req, res) => {
       });
     }
 
-    if (isAccountDisabled(user)) {
+    if (isAccountDisabled(account)) {
       return res.status(403).json({
         code: "ACCOUNT_DISABLED",
         message: "Account is disabled.",
       });
     }
 
-    const token = signJwt(user);
-    const { password: _p, resetCode: _r, resetCodeExpires: _e, ...safeUser } = user.toObject();
+    const token = signJwt(account);
+    const { password: _p, resetCode: _r, resetCodeExpires: _e, ...safeAccount } = account.toObject();
 
     return res.status(200).json({
       message: "Google sign-in successful.",
       token,
-      user: safeUser,
+      user: safeAccount,
     });
   } catch (error) {
     return res.status(400).json({
@@ -497,7 +455,7 @@ exports.googleLogin = async (req, res) => {
 };
 
 // -----------------------
-// SUPPLIER SIGN IN
+// SUPPLIER SIGN IN (backward-compat endpoint)
 // -----------------------
 exports.supplierSignin = async (req, res) => {
   try {
@@ -517,30 +475,29 @@ exports.supplierSignin = async (req, res) => {
       });
     }
 
-    // Must select password explicitly (select: false on schema)
-    const supplier = await Supplier.findOne({ email }).select("+password");
-    if (!supplier) {
+    const account = await Account.findOne({ email, role: "Supplier" }).select("+password");
+    if (!account) {
       return res.status(404).json({
         code: "EMAIL_NOT_FOUND",
         errormessage: "No supplier account found with this email.",
       });
     }
 
-    if (!supplier.isActive) {
+    if (!account.isActive) {
       return res.status(403).json({
         code: "ACCOUNT_DISABLED",
         errormessage: "This supplier account has been suspended.",
       });
     }
 
-    if (!supplier.password) {
+    if (!account.password) {
       return res.status(401).json({
         code: "PASSWORD_NOT_SET",
         errormessage: "No password is set for this account.",
       });
     }
 
-    const ok = await bcrypt.compare(password, supplier.password);
+    const ok = await bcrypt.compare(password, account.password);
     if (!ok) {
       return res.status(401).json({
         code: "INVALID_PASSWORD",
@@ -548,24 +505,13 @@ exports.supplierSignin = async (req, res) => {
       });
     }
 
-    const token = jwt.sign(
-      {
-        id: supplier._id,
-        supplierId: supplier._id,
-        role: "Supplier",
-        shopName: supplier.shopName,
-      },
-      process.env.JWT_SECRET,
-      { expiresIn: "7d" }
-    );
-
-    const safeSupplier = supplier.toObject();
-    delete safeSupplier.password;
+    const token = signJwt(account);
+    const { password: _p, ...safeAccount } = account.toObject();
 
     return res.status(200).json({
       message: "Supplier signed in successfully.",
       token,
-      user: { ...safeSupplier, role: "Supplier" },
+      user: safeAccount,
     });
   } catch (err) {
     return res.status(500).json({

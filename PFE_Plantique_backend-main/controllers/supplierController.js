@@ -1,11 +1,10 @@
-const Supplier = require("../models/Supplier");
+const Account = require("../models/Account");
 const Product  = require("../models/Product");
 const cloudinary = require("cloudinary").v2;
 const bcrypt = require("bcrypt");
 
-// Strips the password hash before a Supplier doc is sent to the client
-const toSafeSupplier = (supplier) => {
-  const obj = supplier.toObject ? supplier.toObject() : { ...supplier };
+const toSafeAccount = (account) => {
+  const obj = account.toObject ? account.toObject() : { ...account };
   delete obj.password;
   return obj;
 };
@@ -21,20 +20,18 @@ const uploadLogo = (buffer) =>
 
 // ── Public reads ───────────────────────────────────────────────────────────────
 
-// GET /api/suppliers
 exports.list = async (_req, res) => {
   try {
-    const suppliers = await Supplier.find({ isActive: true }).sort({ shopName: 1 });
+    const suppliers = await Account.find({ role: "Supplier", isActive: true }).sort({ shopName: 1 });
     res.json(suppliers);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 };
 
-// GET /api/suppliers/:id
 exports.getById = async (req, res) => {
   try {
-    const supplier = await Supplier.findById(req.params.id);
+    const supplier = await Account.findById(req.params.id);
     if (!supplier) return res.status(404).json({ error: "Supplier not found" });
     res.json(supplier);
   } catch (err) {
@@ -42,11 +39,10 @@ exports.getById = async (req, res) => {
   }
 };
 
-// GET /api/suppliers/with-stats
 exports.withStats = async (_req, res) => {
   try {
-    const suppliers = await Supplier.aggregate([
-      { $match: { isActive: true } },
+    const suppliers = await Account.aggregate([
+      { $match: { role: "Supplier", isActive: true } },
       {
         $lookup: {
           from: "products",
@@ -56,7 +52,7 @@ exports.withStats = async (_req, res) => {
               $match: {
                 $expr: {
                   $and: [
-                    { $eq: ["$supplier", "$$sid"] },
+                    { $eq: ["$sellerId", "$$sid"] },
                     { $eq: ["$isActive", true] },
                   ],
                 },
@@ -103,11 +99,10 @@ exports.withStats = async (_req, res) => {
   }
 };
 
-// GET /api/suppliers/admin  (admin only — includes inactive/suspended, with product counts)
 exports.adminList = async (req, res) => {
   try {
     const { q } = req.query;
-    const match = {};
+    const match = { role: "Supplier" };
     if (q) {
       match.$or = [
         { shopName:  { $regex: q, $options: "i" } },
@@ -117,14 +112,14 @@ exports.adminList = async (req, res) => {
       ];
     }
 
-    const suppliers = await Supplier.aggregate([
+    const suppliers = await Account.aggregate([
       { $match: match },
       {
         $lookup: {
           from: "products",
           let: { sid: "$_id" },
           pipeline: [
-            { $match: { $expr: { $eq: ["$supplier", "$$sid"] } } },
+            { $match: { $expr: { $eq: ["$sellerId", "$$sid"] } } },
           ],
           as: "products",
         },
@@ -147,7 +142,6 @@ exports.adminList = async (req, res) => {
 
 // ── Admin writes ───────────────────────────────────────────────────────────────
 
-// POST /api/suppliers
 exports.create = async (req, res) => {
   try {
     const { firstName, lastName, shopName, shopType, email, password, phone, location, bio, subscriptionStart, subscriptionEnd } = req.body;
@@ -165,7 +159,10 @@ exports.create = async (req, res) => {
       hashedPassword = await bcrypt.hash(password, salt);
     }
 
-    const supplier = await Supplier.create({
+    const username = `${firstName || ""} ${lastName || ""}`.trim() || shopName || "Supplier";
+
+    const supplier = await Account.create({
+      username,
       firstName,
       lastName,
       shopName,
@@ -177,20 +174,22 @@ exports.create = async (req, res) => {
       bio:      bio      || undefined,
       logoUrl,
       logoPublicId,
+      role: "Supplier",
+      status: "Active",
+      isActive: true,
       subscriptionStart: subscriptionStart ? new Date(subscriptionStart) : undefined,
       subscriptionEnd:   subscriptionEnd   ? new Date(subscriptionEnd)   : undefined,
     });
 
-    res.status(201).json(toSafeSupplier(supplier));
+    res.status(201).json(toSafeAccount(supplier));
   } catch (err) {
     res.status(400).json({ error: err.message });
   }
 };
 
-// PUT /api/suppliers/:id
 exports.update = async (req, res) => {
   try {
-    const supplier = await Supplier.findById(req.params.id);
+    const supplier = await Account.findById(req.params.id);
     if (!supplier) return res.status(404).json({ error: "Supplier not found" });
 
     const { firstName, lastName, shopName, shopType, email, password, phone, location, bio, isActive, subscriptionStart, subscriptionEnd } = req.body;
@@ -207,7 +206,11 @@ exports.update = async (req, res) => {
     if (subscriptionStart !== undefined) supplier.subscriptionStart = subscriptionStart ? new Date(subscriptionStart) : null;
     if (subscriptionEnd   !== undefined) supplier.subscriptionEnd   = subscriptionEnd   ? new Date(subscriptionEnd)   : null;
 
-    // Only touch the password if a new one was actually submitted
+    // Update username when name changes
+    if (firstName !== undefined || lastName !== undefined) {
+      supplier.username = `${supplier.firstName || ""} ${supplier.lastName || ""}`.trim() || supplier.shopName || "Supplier";
+    }
+
     if (password) {
       const salt = await bcrypt.genSalt(10);
       supplier.password = await bcrypt.hash(password, salt);
@@ -223,16 +226,15 @@ exports.update = async (req, res) => {
     }
 
     await supplier.save();
-    res.json(toSafeSupplier(supplier));
+    res.json(toSafeAccount(supplier));
   } catch (err) {
     res.status(400).json({ error: err.message });
   }
 };
 
-// DELETE /api/suppliers/:id
 exports.remove = async (req, res) => {
   try {
-    const supplier = await Supplier.findByIdAndDelete(req.params.id);
+    const supplier = await Account.findByIdAndDelete(req.params.id);
     if (!supplier) return res.status(404).json({ error: "Supplier not found" });
 
     if (supplier.logoPublicId) {
@@ -240,7 +242,7 @@ exports.remove = async (req, res) => {
     }
 
     await Product.updateMany(
-      { supplier: supplier._id },
+      { sellerId: supplier._id },
       { $set: { isActive: false } }
     );
 

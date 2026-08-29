@@ -102,9 +102,15 @@ class ApiService {
 
   // ── Multipart ─────────────────────────────────────────────────────────────────
 
+  // ── Posts ─────────────────────────────────────────────────────────────────
+
+  static Future<dynamic> getMentionedPosts() async {
+    return get('/supplier-dashboard/posts/mentioned-me');
+  }
+
   // ── User Search ─────────────────────────────────────────────────────────────
 
-  static Future<List<Map<String, dynamic>>> searchUsers(String query) async {
+  static Future<List<Map<String, dynamic>>> searchAll(String query) async {
     if (query.trim().isEmpty) return [];
     final response = await http.get(
       Uri.parse('$baseUrl/supplier-dashboard/users/search?q=${Uri.encodeComponent(query)}'),

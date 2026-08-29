@@ -4,7 +4,7 @@ const { Schema } = mongoose;
 const saveSchema = new Schema(
   {
     posteId: { type: Schema.Types.ObjectId, ref: "Poste", required: true },
-    userId: { type: Schema.Types.ObjectId, ref: "User", required: true },
+    userId: { type: Schema.Types.ObjectId, ref: "Account", required: true },
   },
   { timestamps: true }
 );

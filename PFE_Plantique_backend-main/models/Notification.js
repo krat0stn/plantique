@@ -4,7 +4,7 @@ const notificationSchema = new mongoose.Schema(
   {
     user: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "User",
+      ref: "Account",
       required: true,
       index: true,
     },
@@ -29,12 +29,12 @@ const notificationSchema = new mongoose.Schema(
 
     fromUser: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "User",
+      ref: "Account",
     },
 
     post: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "Post",
+      ref: "Poste",
     },
     blog: {
       type: mongoose.Schema.Types.ObjectId,

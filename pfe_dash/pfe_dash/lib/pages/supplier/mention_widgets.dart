@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:pfe_dash/services/api_service.dart';
 
 /// Renders [text] with @mentions highlighted as colored chips.
+/// Handles are stored with underscores (e.g. @ilyes_ilyes) but displayed as spaces.
 Widget buildHighlightedText(String text, {double fontSize = 13, Color? defaultColor}) {
   final regex = RegExp(r'@(\w+)');
   final spans = <TextSpan>[];
@@ -15,8 +16,10 @@ Widget buildHighlightedText(String text, {double fontSize = 13, Color? defaultCo
         style: TextStyle(fontSize: fontSize, color: defaultColor),
       ));
     }
+    // Display underscores as spaces for readability
+    final displayHandle = match.group(0)?.replaceAll('_', ' ') ?? match.group(0) ?? '';
     spans.add(TextSpan(
-      text: match.group(0),
+      text: displayHandle,
       style: TextStyle(
         fontSize: fontSize,
         fontWeight: FontWeight.bold,
@@ -134,7 +137,7 @@ class _MentionTextFieldState extends State<MentionTextField> {
 
   Future<void> _searchUsers(String query) async {
     try {
-      final results = await ApiService.searchUsers(query);
+      final results = await ApiService.searchAll(query);
       if (!mounted) return;
       setState(() {
         _suggestions = results;
@@ -211,6 +214,7 @@ class _MentionTextFieldState extends State<MentionTextField> {
               itemBuilder: (ctx, i) {
                 final user = _suggestions[i];
                 final username = user['username']?.toString() ?? '';
+                final displayName = user['displayName']?.toString() ?? username;
                 final picture = user['picture']?.toString() ?? '';
                 return ListTile(
                   dense: true,
@@ -227,22 +231,22 @@ class _MentionTextFieldState extends State<MentionTextField> {
                               height: 28,
                               fit: BoxFit.cover,
                               errorBuilder: (_, _, _) => Text(
-                                username.isNotEmpty
-                                    ? username[0].toUpperCase()
+                                displayName.isNotEmpty
+                                    ? displayName[0].toUpperCase()
                                     : '?',
                                 style: const TextStyle(fontSize: 11),
                               ),
                             ),
                           )
                         : Text(
-                            username.isNotEmpty
-                                ? username[0].toUpperCase()
+                            displayName.isNotEmpty
+                                ? displayName[0].toUpperCase()
                                 : '?',
                             style: const TextStyle(fontSize: 11),
                           ),
                   ),
                   title: Text(
-                    '@$username',
+                    '@$displayName',
                     style: const TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w500,

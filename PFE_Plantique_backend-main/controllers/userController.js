@@ -1,12 +1,12 @@
 // controllers/userController.js
-const User = require("../models/User");
+const Account = require("../models/Account");
 const bcrypt = require("bcrypt");
 const validator = require("validator");
 
 // GET /api/users
 exports.getAllUsers = async (req, res) => {
   try {
-    const response = await User.find(
+    const response = await Account.find(
       { role: { $ne: "Admin" } },
       "username email picture status createdAt role",
     ).sort({ createdAt: -1 });
@@ -24,7 +24,7 @@ exports.getAllUsers = async (req, res) => {
 exports.getSingleUser = async (req, res) => {
   const { id } = req.params;
   try {
-    const response = await User.findById(id).select(
+    const response = await Account.findById(id).select(
       "username email picture status createdAt role",
     );
     if (!response)
@@ -39,7 +39,7 @@ exports.getSingleUser = async (req, res) => {
   }
 };
 
-// POST /api/users (multipart: username, email, password, role?, picture?)
+// POST /api/users
 exports.create = async (req, res) => {
   try {
     const body = req.body || {};
@@ -58,8 +58,8 @@ exports.create = async (req, res) => {
       return res.status(400).json({ errormessage: "Adresse e-mail invalide" });
     }
 
-    const existingUser = await User.findOne({ email });
-    if (existingUser) {
+    const existing = await Account.findOne({ email });
+    if (existing) {
       return res.status(400).json({ errormessage: "Email déjà existant" });
     }
 
@@ -68,7 +68,7 @@ exports.create = async (req, res) => {
 
     const picture = req.file?.path || null;
 
-    const newUser = await User.create({
+    const newAccount = await Account.create({
       username,
       email,
       password: hashedPassword,
@@ -78,7 +78,7 @@ exports.create = async (req, res) => {
 
     return res
       .status(201)
-      .json({ successmessage: "Utilisateur créé avec succès", user: newUser });
+      .json({ successmessage: "Utilisateur créé avec succès", user: newAccount });
   } catch (error) {
     return res.status(500).json({
       errormessage: "Erreur lors de la création de l'utilisateur",
@@ -90,7 +90,7 @@ exports.create = async (req, res) => {
 // GET /api/users/me
 exports.getMe = async (req, res) => {
   try {
-    const u = await User.findById(req.user.id).select(
+    const u = await Account.findById(req.user.id).select(
       "username email picture role createdAt status",
     );
     if (!u)
@@ -101,7 +101,7 @@ exports.getMe = async (req, res) => {
   }
 };
 
-// PUT|PATCH /api/users/me (multipart: username?, email?, picture?)
+// PUT|PATCH /api/users/me
 exports.updateMe = async (req, res) => {
   try {
     const updates = {};
@@ -118,8 +118,7 @@ exports.updateMe = async (req, res) => {
           .status(400)
           .json({ errormessage: "Adresse e-mail invalide" });
       }
-      // Prevent duplicate emails
-      const exists = await User.findOne({ email, _id: { $ne: req.user.id } });
+      const exists = await Account.findOne({ email, _id: { $ne: req.user.id } });
       if (exists) {
         return res.status(400).json({ errormessage: "Email déjà existant" });
       }
@@ -127,10 +126,10 @@ exports.updateMe = async (req, res) => {
     }
 
     if (req.file?.path) {
-      updates.picture = req.file.path; // Cloudinary URL
+      updates.picture = req.file.path;
     }
 
-    const u = await User.findByIdAndUpdate(req.user.id, updates, {
+    const u = await Account.findByIdAndUpdate(req.user.id, updates, {
       new: true,
     }).select("username email picture role createdAt status");
 
@@ -143,11 +142,11 @@ exports.updateMe = async (req, res) => {
   }
 };
 
-// PUT /api/users/me/password  {currentPassword, newPassword}
+// PUT /api/users/me/password
 exports.changePassword = async (req, res) => {
   const { currentPassword, newPassword } = req.body || {};
   try {
-    const u = await User.findById(req.user.id).select("+password");
+    const u = await Account.findById(req.user.id).select("+password");
     if (!u)
       return res.status(404).json({ errormessage: "Utilisateur introuvable" });
 
@@ -166,51 +165,46 @@ exports.changePassword = async (req, res) => {
   }
 };
 
-// PUT|PATCH /api/users/:id (Admin edit: ONLY role + optional picture)
+// PUT|PATCH /api/users/:id (Admin edit)
 exports.updateSingleUser = async (req, res) => {
   const { id } = req.params;
-  
+
   try {
     const body = req.body || {};
     const updateData = {};
 
-    // Handle username
     if (typeof body.username === "string") {
       updateData.username = body.username.trim();
     }
 
-    // Handle email
     if (typeof body.email === "string") {
       const email = body.email.trim();
       if (!validator.isEmail(email)) {
         return res.status(400).json({ errormessage: "Adresse e-mail invalide" });
       }
-      const exists = await User.findOne({ email, _id: { $ne: id } });
+      const exists = await Account.findOne({ email, _id: { $ne: id } });
       if (exists) {
         return res.status(400).json({ errormessage: "Email déjà existant" });
       }
       updateData.email = email;
     }
 
-    // Handle status
     if (typeof body.status === "string") {
       updateData.status = body.status;
     }
 
-    // Handle role
     if (typeof body.role !== "undefined") {
-      if (body.role !== "Admin" && body.role !== "User") {
+      if (!["Admin", "User", "Supplier"].includes(body.role)) {
         return res.status(400).json({ errormessage: "Rôle invalide" });
       }
       updateData.role = body.role;
     }
 
-    // Handle picture
     if (req.file?.path) {
       updateData.picture = req.file.path;
     }
 
-    const updated = await User.findByIdAndUpdate(id, updateData, {
+    const updated = await Account.findByIdAndUpdate(id, updateData, {
       new: true,
     }).select("username email picture status createdAt role");
 
@@ -233,7 +227,7 @@ exports.updateSingleUser = async (req, res) => {
 exports.deleteSingleUser = async (req, res) => {
   const { id } = req.params;
   try {
-    const deleted = await User.findByIdAndDelete(id);
+    const deleted = await Account.findByIdAndDelete(id);
     if (!deleted) {
       return res.status(404).json({ errormessage: "Utilisateur introuvable" });
     }

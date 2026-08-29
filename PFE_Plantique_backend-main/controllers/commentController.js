@@ -1,30 +1,27 @@
 // controllers/commentController.js
 const Comment = require("../models/Comment");
 const Poste = require("../models/Poste");
+const Account = require("../models/Account");
 const { notifyPostComment } = require("../utils/realtime");
 const { createNotification } = require("../controllers/notificationController");
 const { extractMentionUsernames, resolveMentionIds, notifyMentionedUsers } = require("../utils/mentions");
 
-// Helper: populate comment userId or supplierId and return a unified author shape
+// Helper: populate comment authorId and return a unified author shape
 async function populateComment(doc) {
   const obj = doc.toObject();
 
-  if (doc.supplierId) {
-    const Supplier = require("../models/Supplier");
-    const supplier = await Supplier.findById(doc.supplierId)
-      .select("firstName lastName shopName logoUrl");
-    if (supplier) {
-      obj.authorName = `${supplier.firstName} ${supplier.lastName}`;
-      obj.authorPicture = supplier.logoUrl || "";
-      obj.authorRole = "Supplier";
-    }
-  } else if (doc.userId) {
-    const User = require("../models/User");
-    const user = await User.findById(doc.userId).select("username picture");
-    if (user) {
-      obj.authorName = user.username;
-      obj.authorPicture = user.picture || "";
-      obj.authorRole = user.role;
+  if (doc.authorId) {
+    const account = await Account.findById(doc.authorId)
+      .select("username picture role firstName lastName logoUrl");
+    if (account) {
+      if (account.role === "Supplier") {
+        obj.authorName = `${account.firstName || ""} ${account.lastName || ""}`.trim() || account.username || "Supplier";
+        obj.authorPicture = account.logoUrl || account.picture || "";
+      } else {
+        obj.authorName = account.username || "Unknown";
+        obj.authorPicture = account.picture || "";
+      }
+      obj.authorRole = account.role;
     }
   }
 
@@ -37,13 +34,11 @@ exports.create = async (req, res) => {
     const { id: posteId } = req.params;
     const { content, parentId } = req.body;
     const userId = req.user?.id;
-    const role = req.user?.role;
-    const isSupplier = role === "Supplier";
 
     if (!content || !content.trim()) {
       return res.status(400).json({ errormessage: "content est requis" });
     }
-    const post = await Poste.findById(posteId).select("_id userId supplierId");
+    const post = await Poste.findById(posteId).select("_id authorId");
     if (!post)
       return res.status(404).json({ errormessage: "Poste introuvable" });
 
@@ -57,15 +52,10 @@ exports.create = async (req, res) => {
 
     const commentData = {
       posteId,
+      authorId: userId,
       content: content.trim(),
       parentId: parentId || null,
     };
-
-    if (isSupplier) {
-      commentData.supplierId = userId;
-    } else {
-      commentData.userId = userId;
-    }
 
     // Extract @mentions from content
     const mentionUsernames = extractMentionUsernames(content);
@@ -86,7 +76,7 @@ exports.create = async (req, res) => {
 
     // Notify the post owner (if not the commenter)
     try {
-      const postOwnerId = post.userId || post.supplierId;
+      const postOwnerId = post.authorId;
       if (postOwnerId && String(postOwnerId) !== String(userId)) {
         await createNotification({
           userId: postOwnerId,
@@ -197,24 +187,21 @@ exports.remove = async (req, res) => {
     const { id: posteId, commentId } = req.params;
     const userId = req.user?.id;
     const isAdmin = req.user?.role === "Admin";
-    const isSupplier = req.user?.role === "Supplier";
 
     const c = await Comment.findOne({ _id: commentId, posteId });
     if (!c)
       return res.status(404).json({ errormessage: "Commentaire introuvable" });
 
-    // Allow if: comment owner, admin, or the post owner (supplier)
+    // Allow if: comment owner, admin, or the post owner
     let allowed = isAdmin;
 
-    if (!allowed) {
-      // Check if the commenter is the same user
-      if (c.userId && String(c.userId) === String(userId)) allowed = true;
-      if (c.supplierId && String(c.supplierId) === String(userId)) allowed = true;
+    if (!allowed && c.authorId && String(c.authorId) === String(userId)) {
+      allowed = true;
     }
 
-    if (!allowed && isSupplier) {
-      const post = await Poste.findById(posteId).select("supplierId");
-      if (post && String(post.supplierId) === String(userId)) {
+    if (!allowed) {
+      const post = await Poste.findById(posteId).select("authorId");
+      if (post && String(post.authorId) === String(userId)) {
         allowed = true;
       }
     }

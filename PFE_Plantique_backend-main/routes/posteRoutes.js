@@ -79,24 +79,7 @@ router.delete("/:id", verifyToken, posteController.deleteSinglePoste);
 router.put("/:id/approve", verifyToken, isAdmin, posteController.approve);
 router.put("/:id/decline", verifyToken, isAdmin, posteController.decline);
 router.put("/:id/pending", verifyToken, isAdmin, posteController.setPending);
-// routes/posteRoutes.js
 router.get("/mine", verifyToken, ctrl.listMine);
-
-// controllers/posteController.js
-exports.listMine = async (req, res) => {
-  const posts = await Poste.find({ userId: req.user.id }).sort({
-    createdAt: -1,
-  });
-  return res.json({ data: posts });
-};
-
-// Efficient saved list:
 router.get("/saved", verifyToken, ctrl.listMySavedPosts);
-
-exports.listMySavedPosts = async (req, res) => {
-  const ids = await Save.find({ userId: req.user.id }).distinct("posteId");
-  const posts = await Poste.find({ _id: { $in: ids } }).sort({ createdAt: -1 });
-  res.json({ data: posts });
-};
 
 module.exports = router;
