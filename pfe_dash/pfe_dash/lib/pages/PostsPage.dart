@@ -3,7 +3,6 @@ import 'package:pfe_dash/services/api_service.dart';
 
 class PostModel {
   final String id;
-  final String userId;
   final String content;
   final String picture;
   final String status;
@@ -14,7 +13,6 @@ class PostModel {
 
   PostModel({
     required this.id,
-    required this.userId,
     required this.content,
     required this.picture,
     required this.status,
@@ -25,21 +23,8 @@ class PostModel {
   });
 
   factory PostModel.fromJson(Map<String, dynamic> json) {
-    // Handle populated userId (object) or just ID (string)
-    final dynamic userData = json['userId'];
-    String uid;
-    if (userData is Map) {
-      uid =
-          userData['_id']?.toString() ??
-          userData['id']?.toString() ??
-          'unknown';
-    } else {
-      uid = userData?.toString() ?? 'unknown';
-    }
-
     return PostModel(
       id: json['_id']?.toString() ?? json['id']?.toString() ?? '',
-      userId: uid,
       content: json['content']?.toString() ?? '',
       picture: json['picture']?.toString() ?? '',
       status: json['status']?.toString() ?? 'pending',
@@ -200,7 +185,6 @@ class _PostsPageState extends State<PostsPage> {
         final search = searchController.text.toLowerCase();
         final matchesSearch =
             post.status.toLowerCase().contains(search) ||
-            post.userId.toLowerCase().contains(search) ||
             post.content.toLowerCase().contains(search);
 
         final matchesType =
@@ -377,7 +361,6 @@ class _PostsPageState extends State<PostsPage> {
                         ),
                         columns: const [
                           DataColumn(label: Text("Image")),
-                          DataColumn(label: Text("User ID")),
                           DataColumn(label: Text("Content")),
                           DataColumn(label: Text("Status")),
                           DataColumn(label: Text("Likes")),
@@ -421,20 +404,6 @@ class _PostsPageState extends State<PostsPage> {
                                         radius: 25,
                                         child: Icon(Icons.image_not_supported),
                                       ),
-                              ),
-                              DataCell(
-                                Text(
-                                  post.userId.substring(
-                                        0,
-                                        post.userId.length > 8
-                                            ? 8
-                                            : post.userId.length,
-                                      ) +
-                                      '...',
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
                               ),
                               DataCell(
                                 SizedBox(

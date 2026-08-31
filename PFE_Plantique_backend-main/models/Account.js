@@ -47,57 +47,6 @@ const AccountSchema = new Schema(
       type: Date,
       default: null,
     },
-
-    // ── Supplier-specific fields ─────────────────────────────────────────
-    firstName: {
-      type: String,
-      trim: true,
-    },
-    lastName: {
-      type: String,
-      trim: true,
-    },
-    shopName: {
-      type: String,
-      trim: true,
-      index: { sparse: true },
-    },
-    shopType: {
-      type: String,
-      trim: true,
-    },
-    phone: {
-      type: String,
-      trim: true,
-    },
-    location: {
-      type: String,
-      trim: true,
-    },
-    bio: {
-      type: String,
-      default: "",
-    },
-    logoUrl: {
-      type: String,
-      trim: true,
-    },
-    logoPublicId: {
-      type: String,
-      trim: true,
-    },
-    isActive: {
-      type: Boolean,
-      default: true,
-    },
-    subscriptionStart: {
-      type: Date,
-      default: null,
-    },
-    subscriptionEnd: {
-      type: Date,
-      default: null,
-    },
   },
   { timestamps: true, versionKey: false }
 );

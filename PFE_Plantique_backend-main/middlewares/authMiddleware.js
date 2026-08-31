@@ -1,6 +1,7 @@
 // middlewares/authMiddleware.js
 const jwt = require("jsonwebtoken");
 const Account = require("../models/Account");
+const Supplier = require("../models/Supplier");
 
 function getToken(req) {
   const h = req.headers["authorization"] || "";
@@ -69,19 +70,24 @@ exports.isSupplier = async (req, res, next) => {
   }
 
   try {
-    const account = await Account.findById(req.user.id).select("isActive subscriptionEnd role");
+    const account = await Account.findById(req.user.id).select("role");
     if (!account) {
       return res.status(403).json({ errormessage: "Supplier account not found" });
     }
     if (account.role !== "Supplier") {
       return res.status(403).json({ errormessage: "Account is not a supplier" });
     }
-    if (!account.isActive) {
+
+    const supplier = await Supplier.findOne({ accountId: req.user.id });
+    if (!supplier) {
+      return res.status(403).json({ errormessage: "Supplier details not found" });
+    }
+    if (!supplier.isActive) {
       return res.status(403).json({ errormessage: "Supplier account is suspended" });
     }
-    if (account.subscriptionEnd && new Date() > account.subscriptionEnd) {
-      account.isActive = false;
-      await account.save();
+    if (supplier.subscriptionEnd && new Date() > supplier.subscriptionEnd) {
+      supplier.isActive = false;
+      await supplier.save();
       return res.status(403).json({ errormessage: "Subscription expired. Account has been suspended." });
     }
   } catch (err) {

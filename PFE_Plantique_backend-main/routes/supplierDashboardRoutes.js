@@ -11,6 +11,7 @@ const upload = multer({
 const { verifyToken, isSupplier } = require("../middlewares/authMiddleware");
 const commentController = require("../controllers/commentController");
 const Account = require("../models/Account");
+const Supplier = require("../models/Supplier");
 const Poste = require("../models/Poste");
 
 const {
@@ -45,28 +46,49 @@ router.get("/users/search", async (req, res) => {
   try {
     const q = (req.query.q || "").trim();
     if (q.length < 1) return res.json({ data: [] });
+
+    // Search in accounts
     const accounts = await Account.find({
       role: { $ne: "Admin" },
       $or: [
         { username: { $regex: q, $options: "i" } },
+        { email: { $regex: q, $options: "i" } },
+      ],
+    })
+      .select("username picture role")
+      .limit(10);
+
+    // Get supplier details for supplier accounts
+    const supplierAccountIds = accounts
+      .filter((a) => a.role === "Supplier")
+      .map((a) => a._id);
+
+    const suppliers = await Supplier.find({
+      accountId: { $in: supplierAccountIds },
+      $or: [
         { firstName: { $regex: q, $options: "i" } },
         { lastName: { $regex: q, $options: "i" } },
         { shopName: { $regex: q, $options: "i" } },
       ],
-    })
-      .select("username picture role firstName lastName logoUrl")
-      .limit(10);
+    }).select("accountId firstName lastName logoUrl");
+
+    const supplierMap = new Map(
+      suppliers.map((s) => [s.accountId.toString(), s])
+    );
 
     const data = accounts.map((a) => {
+      const supplier = supplierMap.get(a._id.toString());
       const displayName = a.role === "Supplier"
-        ? `${a.firstName || ""} ${a.lastName || ""}`.trim() || a.username || "Supplier"
+        ? supplier
+          ? `${supplier.firstName || ""} ${supplier.lastName || ""}`.trim() || a.username || "Supplier"
+          : a.username || "Supplier"
         : a.username;
       // mentionTag is a handle with no spaces, used for @ insertion in text
       const mentionTag = displayName.replace(/\s+/g, "_").toLowerCase();
       return {
         username: mentionTag,
         displayName,
-        picture: a.role === "Supplier" ? (a.logoUrl || a.picture || "") : (a.picture || ""),
+        picture: a.role === "Supplier" ? (supplier?.logoUrl || a.picture || "") : (a.picture || ""),
         role: a.role,
       };
     });
@@ -82,20 +104,34 @@ router.get("/suppliers/search", async (req, res) => {
   try {
     const q = (req.query.q || "").trim();
     if (q.length < 1) return res.json({ data: [] });
-    const suppliers = await Account.find({
-      role: "Supplier",
+
+    // Search in suppliers collection
+    const suppliers = await Supplier.find({
       $or: [
         { firstName: { $regex: q, $options: "i" } },
         { lastName: { $regex: q, $options: "i" } },
         { shopName: { $regex: q, $options: "i" } },
       ],
-    })
-      .select("firstName lastName logoUrl")
-      .limit(10);
-    const data = suppliers.map((s) => ({
-      username: `${s.firstName} ${s.lastName}`,
-      picture: s.logoUrl || "",
-    }));
+    }).select("accountId firstName lastName logoUrl").limit(10);
+
+    // Get account data for these suppliers
+    const accountIds = suppliers.map((s) => s.accountId);
+    const accounts = await Account.find({
+      _id: { $in: accountIds },
+    }).select("username");
+
+    const accountMap = new Map(
+      accounts.map((a) => [a._id.toString(), a])
+    );
+
+    const data = suppliers.map((s) => {
+      const account = accountMap.get(s.accountId.toString());
+      return {
+        username: account?.username || `${s.firstName} ${s.lastName}`,
+        picture: s.logoUrl || "",
+      };
+    });
+
     res.json({ data });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -117,9 +153,30 @@ router.get("/posts/mentioned-me", async (req, res) => {
     ])];
 
     const posts = await Poste.find({ _id: { $in: allPostIds }, status: "approved" })
-      .populate("authorId", "username picture role firstName lastName logoUrl")
+      .populate("authorId", "username picture role")
       .sort({ createdAt: -1 });
-    res.json({ data: posts });
+
+    // Enrich posts with supplier data if author is a supplier
+    const enrichedPosts = await Promise.all(
+      posts.map(async (post) => {
+        const postData = post.toObject();
+        if (postData.authorId?.role === "Supplier") {
+          const supplier = await Supplier.findOne({ accountId: postData.authorId._id })
+            .select("firstName lastName logoUrl");
+          if (supplier) {
+            postData.authorId = {
+              ...postData.authorId,
+              firstName: supplier.firstName,
+              lastName: supplier.lastName,
+              logoUrl: supplier.logoUrl,
+            };
+          }
+        }
+        return postData;
+      })
+    );
+
+    res.json({ data: enrichedPosts });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

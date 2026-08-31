@@ -4,6 +4,7 @@ const Poste    = require("../models/Poste");
 const Blog     = require("../models/Blog");
 const Purchase = require("../models/Purchase");
 const Account  = require("../models/Account");
+const Supplier = require("../models/Supplier");
 const PDFDocument = require("pdfkit");
 const XLSX = require("xlsx");
 const cloudinary = require("cloudinary").v2;
@@ -254,10 +255,14 @@ exports.createPost = async (req, res) => {
 
     // Notify mentioned users
     try {
-      const actor = await Account.findById(authorId).select("username firstName lastName role");
-      const actorName = actor?.role === "Supplier"
-        ? `${actor.firstName || ""} ${actor.lastName || ""}`.trim() || actor?.username || "A supplier"
-        : actor?.username || "Someone";
+      const actor = await Account.findById(authorId).select("username role");
+      let actorName = actor?.username || "Someone";
+      if (actor?.role === "Supplier") {
+        const supplier = await Supplier.findOne({ accountId: authorId }).select("firstName lastName");
+        if (supplier) {
+          actorName = `${supplier.firstName || ""} ${supplier.lastName || ""}`.trim() || actor?.username || "A supplier";
+        }
+      }
       await notifyMentionedUsers({
         mentionedIds: mentionIds,
         actorUserId: authorId,
@@ -323,10 +328,14 @@ exports.updatePost = async (req, res) => {
     // Notify newly mentioned users
     try {
       if (content !== undefined) {
-        const actor = await Account.findById(authorId).select("username firstName lastName role");
-        const actorName = actor?.role === "Supplier"
-          ? `${actor.firstName || ""} ${actor.lastName || ""}`.trim() || actor?.username || "A supplier"
-          : actor?.username || "Someone";
+        const actor = await Account.findById(authorId).select("username role");
+        let actorName = actor?.username || "Someone";
+        if (actor?.role === "Supplier") {
+          const supplier = await Supplier.findOne({ accountId: authorId }).select("firstName lastName");
+          if (supplier) {
+            actorName = `${supplier.firstName || ""} ${supplier.lastName || ""}`.trim() || actor?.username || "A supplier";
+          }
+        }
         await notifyMentionedUsers({
           mentionedIds: post.mentions || [],
           actorUserId: authorId,
@@ -571,9 +580,15 @@ exports.getReceipt = async (req, res) => {
       return res.status(403).json({ error: "Access denied" });
     }
 
-    const supplier = await Account.findById(sellerId).select(
-      "shopName email phone location logoUrl"
+    const supplierAccount = await Account.findById(sellerId).select("email");
+    const supplierDetails = await Supplier.findOne({ accountId: sellerId }).select(
+      "shopName phone location logoUrl"
     );
+
+    const supplier = {
+      ...(supplierAccount?.toObject() || {}),
+      ...(supplierDetails?.toObject() || {}),
+    };
 
     const doc = new PDFDocument({ size: "A4", margin: 50 });
 
@@ -724,7 +739,17 @@ exports.getProfile = async (req, res) => {
     const sellerId = req.user.id;
     const account = await Account.findById(sellerId);
     if (!account) return res.status(404).json({ error: "Supplier not found" });
-    res.json({ data: account });
+
+    const supplier = await Supplier.findOne({ accountId: sellerId });
+    
+    // Merge account and supplier data
+    const profile = {
+      ...account.toObject(),
+      ...(supplier?.toObject() || {}),
+    };
+    delete profile.password;
+
+    res.json({ data: profile });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

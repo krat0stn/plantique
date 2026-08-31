@@ -2,6 +2,7 @@
 const Comment = require("../models/Comment");
 const Poste = require("../models/Poste");
 const Account = require("../models/Account");
+const Supplier = require("../models/Supplier");
 const { notifyPostComment } = require("../utils/realtime");
 const { createNotification } = require("../controllers/notificationController");
 const { extractMentionUsernames, resolveMentionIds, notifyMentionedUsers } = require("../utils/mentions");
@@ -12,11 +13,15 @@ async function populateComment(doc) {
 
   if (doc.authorId) {
     const account = await Account.findById(doc.authorId)
-      .select("username picture role firstName lastName logoUrl");
+      .select("username picture role");
     if (account) {
       if (account.role === "Supplier") {
-        obj.authorName = `${account.firstName || ""} ${account.lastName || ""}`.trim() || account.username || "Supplier";
-        obj.authorPicture = account.logoUrl || account.picture || "";
+        const supplier = await Supplier.findOne({ accountId: account._id })
+          .select("firstName lastName logoUrl");
+        obj.authorName = supplier
+          ? `${supplier.firstName || ""} ${supplier.lastName || ""}`.trim() || account.username || "Supplier"
+          : account.username || "Supplier";
+        obj.authorPicture = supplier?.logoUrl || account.picture || "";
       } else {
         obj.authorName = account.username || "Unknown";
         obj.authorPicture = account.picture || "";

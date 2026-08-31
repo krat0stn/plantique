@@ -3,22 +3,64 @@ const { Schema } = mongoose;
 
 const SupplierSchema = new Schema(
   {
-    firstName:    { type: String, required: true, trim: true },
-    lastName:     { type: String, required: true, trim: true },
-    shopName:     { type: String, required: true, trim: true, index: true },
-    shopType:     { type: String, trim: true },
-    email:        { type: String, trim: true, lowercase: true },
-    password:     { type: String, select: false },
-    phone:        { type: String, trim: true },
-    location:     { type: String, trim: true },
-    bio:          { type: String, default: "" },
-    logoUrl:      { type: String, trim: true },
-    logoPublicId: { type: String, trim: true },
-    isActive:     { type: Boolean, default: true },
-    subscriptionStart: { type: Date, default: null },
-    subscriptionEnd:   { type: Date, default: null },
+    accountId: {
+      type: Schema.Types.ObjectId,
+      ref: "Account",
+      required: true,
+      unique: true,
+      index: true,
+    },
+    firstName: {
+      type: String,
+      trim: true,
+    },
+    lastName: {
+      type: String,
+      trim: true,
+    },
+    shopName: {
+      type: String,
+      trim: true,
+      index: { sparse: true },
+    },
+    shopType: {
+      type: String,
+      trim: true,
+    },
+    phone: {
+      type: String,
+      trim: true,
+    },
+    location: {
+      type: String,
+      trim: true,
+    },
+    bio: {
+      type: String,
+      default: "",
+    },
+    logoUrl: {
+      type: String,
+      trim: true,
+    },
+    logoPublicId: {
+      type: String,
+      trim: true,
+    },
+    isActive: {
+      type: Boolean,
+      default: true,
+    },
+    subscriptionStart: {
+      type: Date,
+      default: null,
+    },
+    subscriptionEnd: {
+      type: Date,
+      default: null,
+    },
   },
-  { timestamps: true }
+  { timestamps: true, versionKey: false }
 );
 
 module.exports = mongoose.model("Supplier", SupplierSchema);

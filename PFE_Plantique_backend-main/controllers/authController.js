@@ -1,4 +1,5 @@
 const Account = require("../models/Account");
+const Supplier = require("../models/Supplier");
 const bcrypt = require("bcrypt");
 const { Resend } = require("resend");
 const { generateResetEmailTemplate } = require("../utils/emailTemplates");
@@ -15,15 +16,15 @@ function isAccountDisabled(account) {
   return account?.status && account.status !== "Active";
 }
 
-function signJwt(account) {
+function signJwt(account, supplierData) {
   const payload = {
     id: account._id,
     role: account.role,
     username: account.username,
   };
-  if (account.role === "Supplier") {
+  if (account.role === "Supplier" && supplierData) {
     payload.supplierId = account._id;
-    payload.shopName = account.shopName;
+    payload.shopName = supplierData.shopName;
   }
   return jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: "7d" });
 }
@@ -71,11 +72,14 @@ exports.signin = async (req, res) => {
       });
     }
 
-    if (account.role === "Supplier" && !account.isActive) {
-      return res.status(403).json({
-        code: "ACCOUNT_DISABLED",
-        errormessage: "This supplier account has been suspended.",
-      });
+    if (account.role === "Supplier") {
+      const supplier = await Supplier.findOne({ accountId: account._id });
+      if (supplier && !supplier.isActive) {
+        return res.status(403).json({
+          code: "ACCOUNT_DISABLED",
+          errormessage: "This supplier account has been suspended.",
+        });
+      }
     }
 
     if (!account.password) {
@@ -94,13 +98,24 @@ exports.signin = async (req, res) => {
       });
     }
 
-    const token = signJwt(account);
     const { password: _p, resetCode: _r, resetCodeExpires: _e, ...safeAccount } = account.toObject();
+
+    // For suppliers, merge supplier data
+    let userData = safeAccount;
+    let supplierData = null;
+    if (account.role === "Supplier") {
+      supplierData = await Supplier.findOne({ accountId: account._id });
+      if (supplierData) {
+        userData = { ...safeAccount, ...supplierData.toObject() };
+      }
+    }
+
+    const token = signJwt(account, supplierData);
 
     return res.status(200).json({
       message: "Signed in successfully.",
       token,
-      user: safeAccount,
+      user: userData,
     });
   } catch (err) {
     return res.status(500).json({
@@ -483,7 +498,15 @@ exports.supplierSignin = async (req, res) => {
       });
     }
 
-    if (!account.isActive) {
+    const supplier = await Supplier.findOne({ accountId: account._id });
+    if (!supplier) {
+      return res.status(404).json({
+        code: "SUPPLIER_NOT_FOUND",
+        errormessage: "Supplier details not found.",
+      });
+    }
+
+    if (!supplier.isActive) {
       return res.status(403).json({
         code: "ACCOUNT_DISABLED",
         errormessage: "This supplier account has been suspended.",
@@ -505,13 +528,20 @@ exports.supplierSignin = async (req, res) => {
       });
     }
 
-    const token = signJwt(account);
     const { password: _p, ...safeAccount } = account.toObject();
+
+    // Merge supplier data
+    let userData = safeAccount;
+    if (supplier) {
+      userData = { ...safeAccount, ...supplier.toObject() };
+    }
+
+    const token = signJwt(account, supplier);
 
     return res.status(200).json({
       message: "Supplier signed in successfully.",
       token,
-      user: safeAccount,
+      user: userData,
     });
   } catch (err) {
     return res.status(500).json({
